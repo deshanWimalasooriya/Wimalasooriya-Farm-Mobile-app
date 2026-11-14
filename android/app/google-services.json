@@ -1,0 +1,41 @@
+{
+  "project_info": {
+    "project_number": "412426940750",
+    "firebase_url": "https://wimalasooriya-farms-default-rtdb.firebaseio.com",
+    "project_id": "wimalasooriya-farms",
+    "storage_bucket": "wimalasooriya-farms.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:412426940750:android:532730be2ac47121fcee1f",
+        "android_client_info": {
+          "package_name": "com.wimalasooriya.wimalasooriya_farm"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "412426940750-q1mbhghv8vfgbppk1riii8e2qbak8acv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAe71uxP6BlgSSV0YHKJvMDFNBV6mH1w3s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "412426940750-q1mbhghv8vfgbppk1riii8e2qbak8acv.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+
