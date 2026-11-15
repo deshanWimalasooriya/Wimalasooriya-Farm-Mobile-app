@@ -791,3 +791,76 @@ class VehicleMaintenanceLog {
     };
   }
 }
+
+class FarmSettings {
+  final String companyName;
+  final String address;
+  final String contactNumber;
+  final double unitEggPrice;
+  final int maxHenCapacity;
+  final DateTime? updatedAt;
+
+  FarmSettings({
+    this.companyName = 'Wimalasooriya Farms (Pvt) Ltd',
+    this.address = 'Kurunegala, Sri Lanka',
+    this.contactNumber = '+94 77 123 4567',
+    this.unitEggPrice = 40.0,
+    this.maxHenCapacity = 10000,
+    this.updatedAt,
+  });
+
+  factory FarmSettings.fromMap(Map<String, dynamic> data) {
+    return FarmSettings(
+      companyName: data['companyName'] ?? 'Wimalasooriya Farms (Pvt) Ltd',
+      address: data['address'] ?? 'Kurunegala, Sri Lanka',
+      contactNumber: data['contactNumber'] ?? '+94 77 123 4567',
+      unitEggPrice: ((data['unitEggPrice'] ?? 40.0) as num).toDouble(),
+      maxHenCapacity: (data['maxHenCapacity'] ?? 10000) as int,
+      updatedAt: parseDateTime(data['updatedAt']),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'companyName': companyName,
+      'address': address,
+      'contactNumber': contactNumber,
+      'unitEggPrice': unitEggPrice,
+      'maxHenCapacity': maxHenCapacity,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+  }
+
+  FarmSettings copyWith({
+    String? companyName,
+    String? address,
+    String? contactNumber,
+    double? unitEggPrice,
+    int? maxHenCapacity,
+    DateTime? updatedAt,
+  }) {
+    return FarmSettings(
+      companyName: companyName ?? this.companyName,
+      address: address ?? this.address,
+      contactNumber: contactNumber ?? this.contactNumber,
+      unitEggPrice: unitEggPrice ?? this.unitEggPrice,
+      maxHenCapacity: maxHenCapacity ?? this.maxHenCapacity,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FarmSettings &&
+          runtimeType == other.runtimeType &&
+          companyName == other.companyName &&
+          address == other.address &&
+          contactNumber == other.contactNumber &&
+          unitEggPrice == other.unitEggPrice &&
+          maxHenCapacity == other.maxHenCapacity;
+
+  @override
+  int get hashCode => Object.hash(companyName, address, contactNumber, unitEggPrice, maxHenCapacity);
+}
+

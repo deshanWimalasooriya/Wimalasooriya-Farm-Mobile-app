@@ -66,6 +66,11 @@ final rolesStreamProvider = StreamProvider<List<String>>((ref) {
   return db.streamRoles();
 });
 
+final farmSettingsStreamProvider = StreamProvider<FarmSettings>((ref) {
+  final db = ref.watch(databaseServiceProvider);
+  return db.streamFarmSettings();
+});
+
 // Expiring vehicles provider (identifies vehicles with documents expiring <= 10 days or expired)
 final expiringVehiclesProvider = Provider<List<Map<String, dynamic>>>((ref) {
   final vehicles = ref.watch(vehiclesStreamProvider).value ?? [];

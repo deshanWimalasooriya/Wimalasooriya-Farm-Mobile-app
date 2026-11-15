@@ -15,6 +15,12 @@ class FleetScreen extends ConsumerStatefulWidget {
 
 class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  bool _filterNoDriver = false;
+  String? _selectedFilterGroupId;
+  String _selectedVehicleType = 'All';
+  final List<String> _vehicleTypes = ['All', 'Lorry', 'Tractor', 'Van', 'Bike', 'Three-Wheeler', 'Cab'];
 
   @override
   void initState() {
@@ -25,6 +31,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -130,8 +137,187 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
   }
 
   // ==================== TAB 1: ALL VEHICLES ====================
+  Widget _buildSearchAndFilterHeader(bool isDark, List<VehicleGroup> groups) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F1E36) : Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. Search Bar + Vehicle Group Filter Dropdown
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 42,
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                    style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF0B1B3D)),
+                    decoration: InputDecoration(
+                      hintText: 'Search Reg No or Make/Model...',
+                      hintStyle: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppColors.darkPrimaryGold),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 16),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: isDark ? const Color(0xFF0B1B3D) : const Color(0xFFF1F5F9),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Group Filter Dropdown button
+              Container(
+                height: 42,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0B1B3D) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _selectedFilterGroupId != null ? AppColors.darkPrimaryGold : Colors.transparent,
+                    width: 1,
+                  ),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String?>(
+                    value: _selectedFilterGroupId,
+                    hint: Text(
+                      'Group',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                      ),
+                    ),
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.darkPrimaryGold),
+                    dropdownColor: isDark ? const Color(0xFF0B1B3D) : Colors.white,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF0B1B3D),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('All Groups'),
+                      ),
+                      ...groups.map((g) => DropdownMenuItem<String?>(
+                            value: g.id,
+                            child: Text(g.name),
+                          )),
+                    ],
+                    onChanged: (val) {
+                      setState(() => _selectedFilterGroupId = val);
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // 2. Horizontal Scrollable Chips: "No Driver" toggle + Vehicle Type chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                // "No Driver" Toggle Chip
+                FilterChip(
+                  selected: _filterNoDriver,
+                  showCheckmark: false,
+                  avatar: Icon(
+                    _filterNoDriver ? Icons.person_off_rounded : Icons.person_outline_rounded,
+                    size: 14,
+                    color: _filterNoDriver ? const Color(0xFF0B1B3D) : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                  ),
+                  label: const Text('No Driver'),
+                  labelStyle: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: _filterNoDriver ? const Color(0xFF0B1B3D) : (isDark ? Colors.white : const Color(0xFF0B1B3D)),
+                  ),
+                  backgroundColor: isDark ? const Color(0xFF0B1B3D) : const Color(0xFFF1F5F9),
+                  selectedColor: AppColors.darkPrimaryGold,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(
+                      color: _filterNoDriver ? AppColors.darkPrimaryGold : (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                  onSelected: (selected) {
+                    setState(() => _filterNoDriver = selected);
+                  },
+                ),
+                const SizedBox(width: 8),
+
+                // Divider line
+                Container(width: 1, height: 18, color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                const SizedBox(width: 8),
+
+                // Vehicle Type Chips: All, Lorry, Tractor, Van, Bike, Three-Wheeler, Cab
+                ..._vehicleTypes.map((type) {
+                  final isSelected = _selectedVehicleType == type;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      selected: isSelected,
+                      showCheckmark: false,
+                      label: Text(type),
+                      labelStyle: TextStyle(
+                        fontSize: 11,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected ? const Color(0xFF0B1B3D) : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                      ),
+                      backgroundColor: isDark ? const Color(0xFF0B1B3D) : const Color(0xFFF1F5F9),
+                      selectedColor: AppColors.darkPrimaryGold,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(
+                          color: isSelected ? AppColors.darkPrimaryGold : Colors.transparent,
+                        ),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() => _selectedVehicleType = type);
+                        }
+                      },
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAllVehiclesTab(bool isDark) {
     final vehiclesAsync = ref.watch(vehiclesStreamProvider);
+    final groupsAsync = ref.watch(vehicleGroupsStreamProvider);
+    final groups = groupsAsync.value ?? [];
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -142,45 +328,93 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
         icon: const Icon(Icons.add_rounded, size: 22),
         label: const Text('Add Vehicle', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
-      body: vehiclesAsync.when(
-        data: (vehicles) {
-          if (vehicles.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.no_crash_rounded, size: 48, color: Color(0xFF64748B)),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No vehicles registered yet.',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Tap "+ Add Vehicle" to register a delivery vehicle or tractor.',
-                    style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-                  ),
-                ],
-              ),
-            );
-          }
+      body: Column(
+        children: [
+          // Search & Filter Interactive Header
+          _buildSearchAndFilterHeader(isDark, groups),
 
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-            itemCount: vehicles.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 14),
-            itemBuilder: (ctx, idx) => _buildVehicleCard(vehicles[idx], isDark),
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.darkPrimaryGold)),
-        error: (err, _) => Center(child: Text('Error loading vehicles: $err', style: const TextStyle(color: Colors.red))),
+          // Vehicle List with Real-Time Filtering
+          Expanded(
+            child: vehiclesAsync.when(
+              data: (vehicles) {
+                final filtered = vehicles.where((v) {
+                  // 1. Search Query filter (regNumber or makeModel)
+                  if (_searchQuery.isNotEmpty) {
+                    final query = _searchQuery.toLowerCase();
+                    final matchReg = v.regNumber.toLowerCase().contains(query);
+                    final matchModel = v.makeModel.toLowerCase().contains(query);
+                    if (!matchReg && !matchModel) return false;
+                  }
+
+                  // 2. No Driver filter
+                  if (_filterNoDriver && v.assignedDriverIds.isNotEmpty) {
+                    return false;
+                  }
+
+                  // 3. Vehicle Group filter
+                  if (_selectedFilterGroupId != null && _selectedFilterGroupId!.isNotEmpty) {
+                    if (v.groupId != _selectedFilterGroupId) return false;
+                  }
+
+                  // 4. Vehicle Type filter
+                  if (_selectedVehicleType != 'All') {
+                    if (v.vehicleType.toLowerCase() != _selectedVehicleType.toLowerCase()) return false;
+                  }
+
+                  return true;
+                }).toList();
+
+                if (filtered.isEmpty) {
+                  final isFiltered = _searchQuery.isNotEmpty ||
+                      _filterNoDriver ||
+                      _selectedFilterGroupId != null ||
+                      _selectedVehicleType != 'All';
+
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            isFiltered ? Icons.search_off_rounded : Icons.no_crash_rounded,
+                            size: 48,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          isFiltered ? 'No matching vehicles found.' : 'No vehicles registered yet.',
+                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          isFiltered
+                              ? 'Try adjusting your search keywords or filter criteria.'
+                              : 'Tap "+ Add Vehicle" to register a delivery vehicle or tractor.',
+                          style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+                  itemCount: filtered.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 14),
+                  itemBuilder: (ctx, idx) => _buildVehicleCard(filtered[idx], isDark),
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator(color: AppColors.darkPrimaryGold)),
+              error: (err, _) => Center(child: Text('Error loading vehicles: $err', style: const TextStyle(color: Colors.red))),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -808,6 +1042,13 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
               }
             }
 
+            final uniqueGroups = <String, VehicleGroup>{};
+            for (final g in groups) {
+              uniqueGroups[g.id] = g;
+            }
+            final groupList = uniqueGroups.values.toList();
+            final validGroupId = groupList.any((g) => g.id == selectedGroupId) ? selectedGroupId : null;
+
             return AlertDialog(
               backgroundColor: isDark ? const Color(0xFF0F1E36) : Colors.white,
               shape: RoundedRectangleBorder(
@@ -900,14 +1141,6 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
                         ),
                       ),
                       const SizedBox(height: 10),
-
-                      // Deduplicate groups by id
-                      final uniqueGroups = <String, VehicleGroup>{};
-                      for (final g in groups) {
-                        uniqueGroups[g.id] = g;
-                      }
-                      final groupList = uniqueGroups.values.toList();
-                      final validGroupId = groupList.any((g) => g.id == selectedGroupId) ? selectedGroupId : null;
 
                       // Vehicle Group Assignment
                       DropdownButtonFormField<String?>(
@@ -1095,48 +1328,63 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
                       const Divider(color: Color(0x22FFFFFF)),
                       const SizedBox(height: 10),
 
-                      // Section 3: Driver Assignments
+                      // Section 3: Driver Assignments (Strict Driver Role Filter & Optional)
                       const Text(
-                        'ASSIGN RESPONSIBLE DRIVERS',
+                        'ASSIGN RESPONSIBLE DRIVERS (OPTIONAL)',
                         style: TextStyle(color: AppColors.darkPrimaryGold, fontSize: 12, fontWeight: FontWeight.bold),
                       ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Only active workers with "Driver" role are displayed. You can save without assigning a driver.',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                      ),
                       const SizedBox(height: 8),
-                      if (workers.isEmpty)
-                        const Text('No workers registered yet.', style: TextStyle(color: Color(0xFF64748B), fontSize: 12))
-                      else
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: workers.map((worker) {
-                            final isAssigned = assignedDriverIds.contains(worker.workerId);
-                            final isDriverRole = worker.role.toLowerCase().contains('driver');
-                            return FilterChip(
-                              selected: isAssigned,
-                              label: Text(
-                                '${worker.name}${isDriverRole ? " (Driver)" : ""}',
-                                style: TextStyle(
-                                  color: isAssigned ? const Color(0xFF0B1B3D) : (isDark ? Colors.white : const Color(0xFF0B1B3D)),
-                                  fontWeight: isAssigned ? FontWeight.bold : FontWeight.normal,
-                                  fontSize: 12,
-                                ),
+                      Builder(
+                        builder: (context) {
+                          final driverWorkers = workers.where((w) => w.role.toLowerCase().contains('driver')).toList();
+                          if (driverWorkers.isEmpty) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8),
+                              child: Text(
+                                'No registered workers with "Driver" role found. Driver assignment is optional.',
+                                style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontStyle: FontStyle.italic),
                               ),
-                              backgroundColor: isDark ? const Color(0xFF162544) : const Color(0xFFF1F5F9),
-                              selectedColor: AppColors.darkPrimaryGold,
-                              checkmarkColor: const Color(0xFF0B1B3D),
-                              onSelected: (selected) {
-                                setDialogState(() {
-                                  if (selected) {
-                                    assignedDriverIds.add(worker.workerId);
-                                    assignedDriverNames.add(worker.name);
-                                  } else {
-                                    assignedDriverIds.remove(worker.workerId);
-                                    assignedDriverNames.remove(worker.name);
-                                  }
-                                });
-                              },
                             );
-                          }).toList(),
-                        ),
+                          }
+                          return Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: driverWorkers.map((worker) {
+                              final isAssigned = assignedDriverIds.contains(worker.workerId);
+                              return FilterChip(
+                                selected: isAssigned,
+                                label: Text(
+                                  worker.name,
+                                  style: TextStyle(
+                                    color: isAssigned ? const Color(0xFF0B1B3D) : (isDark ? Colors.white : const Color(0xFF0B1B3D)),
+                                    fontWeight: isAssigned ? FontWeight.bold : FontWeight.normal,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                backgroundColor: isDark ? const Color(0xFF162544) : const Color(0xFFF1F5F9),
+                                selectedColor: AppColors.darkPrimaryGold,
+                                checkmarkColor: const Color(0xFF0B1B3D),
+                                onSelected: (selected) {
+                                  setDialogState(() {
+                                    if (selected) {
+                                      assignedDriverIds.add(worker.workerId);
+                                      assignedDriverNames.add(worker.name);
+                                    } else {
+                                      assignedDriverIds.remove(worker.workerId);
+                                      assignedDriverNames.remove(worker.name);
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),

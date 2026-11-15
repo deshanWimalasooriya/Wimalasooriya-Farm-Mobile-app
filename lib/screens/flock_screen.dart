@@ -37,12 +37,51 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
   }
 
   Future<void> _recordFlockChange() async {
-    final db = ref.read(databaseServiceProvider);
     final count = int.tryParse(_henDeltaController.text) ?? _henDelta;
     if (count <= 0) return;
 
     final action = (_selectedReason == 'New Batch') ? 'add' : 'remove';
+    final actionLabel = action == 'add' ? 'Add' : 'Remove';
 
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF16264C),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(
+              action == 'add' ? Icons.add_circle_outline_rounded : Icons.remove_circle_outline_rounded,
+              color: action == 'add' ? AppColors.darkGreen : const Color(0xFFEF4444),
+            ),
+            const SizedBox(width: 10),
+            Text('Confirm Flock $actionLabel', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to ${action == 'add' ? 'add' : 'deduct'} $count hens ($actionLabel reason: $_selectedReason) in Firestore?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: action == 'add' ? AppColors.darkGreen : const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('CONFIRM $actionLabel'.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final db = ref.read(databaseServiceProvider);
     try {
       await db.recordFlockChange(
         action: action,
@@ -806,8 +845,45 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
             height: 48,
             child: ElevatedButton(
               onPressed: () async {
-                final db = ref.read(databaseServiceProvider);
                 final count = int.tryParse(_eggYieldController.text) ?? _eggYieldCount;
+                if (count <= 0) return;
+
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: const Color(0xFF16264C),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    title: const Row(
+                      children: [
+                        Icon(Icons.egg_outlined, color: AppColors.darkPrimaryGold),
+                        SizedBox(width: 10),
+                        Text('Confirm Egg Yield', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    content: Text(
+                      'Record $count eggs collected today into Firestore egg logs?',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.darkPrimaryGold,
+                          foregroundColor: const Color(0xFF0B1B3D),
+                        ),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('CONFIRM LOG', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm != true) return;
+
+                final db = ref.read(databaseServiceProvider);
                 await db.recordEggProduction(producedCount: count, loggedBy: 'Deshan Wimalasooriya');
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(

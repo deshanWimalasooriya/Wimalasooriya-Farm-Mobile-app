@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../core/constants/app_assets.dart';
 import '../core/theme/app_colors.dart';
 import '../models/farm_models.dart';
@@ -29,6 +30,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
   final TextEditingController _salaryNoteController = TextEditingController();
 
   // 3. Maintenance Sub-Tab State
+  String _maintenanceMode = 'Vehicle Maintenance'; // 'Vehicle Maintenance' or 'Factory Maintenance'
   Vehicle? _selectedMaintVehicle;
   String? _selectedMaintDriverName;
   String? _selectedMaintDriverId;
@@ -164,9 +166,89 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     return result ?? false;
   }
 
+  double _getCurrentSystemBalance() {
+    final transactions = ref.read(transactionsStreamProvider).value ?? [];
+    final totalIncome = transactions
+        .where((t) => t.type == 'income')
+        .fold<double>(0.0, (sum, t) => sum + t.amount);
+    final totalExpense = transactions
+        .where((t) => t.type == 'expense')
+        .fold<double>(0.0, (sum, t) => sum + t.amount);
+    return totalIncome - totalExpense;
+  }
+
+  Future<void> _showInsufficientFundsDialog(double requestedAmount, double currentBalance) async {
+    final formatter = NumberFormat.currency(symbol: 'Rs. ', decimalDigits: 2);
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF16264C),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.account_balance_wallet_outlined, color: Color(0xFFEF4444)),
+            SizedBox(width: 10),
+            Text('Insufficient Funds', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          'Insufficient Funds in System.\n'
+          'Current balance: ${formatter.format(currentBalance)}\n'
+          'Requested: ${formatter.format(requestedAmount)}\n\n'
+          'Expenses cannot exceed available balance.',
+          style: const TextStyle(color: Colors.white70, height: 1.4),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.darkPrimaryGold,
+              foregroundColor: const Color(0xFF0B1B3D),
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _recordEggTransaction(double unitPrice) async {
     final db = ref.read(databaseServiceProvider);
     if (_soldEggs <= 0) return;
+
+    final metrics = ref.read(farmMetricsStreamProvider).value;
+    final availableEggs = metrics?.todayEggCount ?? 0;
+    if (_soldEggs > availableEggs) {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF16264C),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.inventory_2_outlined, color: Color(0xFFEF4444)),
+              SizedBox(width: 10),
+              Text('Insufficient Egg Inventory', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Text(
+            'Cannot sell $_soldEggs eggs. Available stock is only $availableEggs eggs.',
+            style: const TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.darkPrimaryGold,
+                foregroundColor: const Color(0xFF0B1B3D),
+              ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     final total = _soldEggs * unitPrice;
     final confirmed = await _showConfirmationDialog(
@@ -201,6 +283,117 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     }
   }
 
+  Future<bool> _promptAdminPasswordConfirmation(BuildContext context) async {
+    final passwordCtrl = TextEditingController();
+    bool isAuthenticating = false;
+    String? errorMsg;
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF16264C),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Row(
+                children: [
+                  Icon(Icons.lock_outline_rounded, color: AppColors.darkPrimaryGold),
+                  SizedBox(width: 10),
+                  Text('Admin Authentication', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Re-enter your admin password to authorize this salary disbursement.',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordCtrl,
+                    obscureText: true,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Admin Password',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      fillColor: const Color(0xFF0B1B3D),
+                      filled: true,
+                      prefixIcon: const Icon(Icons.key_rounded, color: AppColors.darkPrimaryGold),
+                      errorText: errorMsg,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isAuthenticating ? null : () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.darkPrimaryGold,
+                    foregroundColor: const Color(0xFF0B1B3D),
+                  ),
+                  onPressed: isAuthenticating
+                      ? null
+                      : () async {
+                          final pass = passwordCtrl.text.trim();
+                          if (pass.isEmpty) {
+                            setDialogState(() => errorMsg = 'Password cannot be empty');
+                            return;
+                          }
+                          setDialogState(() {
+                            isAuthenticating = true;
+                            errorMsg = null;
+                          });
+
+                          try {
+                            final user = FirebaseAuth.instance.currentUser;
+                            if (user != null && user.email != null) {
+                              final cred = EmailAuthProvider.credential(
+                                email: user.email!,
+                                password: pass,
+                              );
+                              await user.reauthenticateWithCredential(cred);
+                              if (ctx.mounted) Navigator.pop(ctx, true);
+                            } else {
+                              if (pass.length >= 6) {
+                                if (ctx.mounted) Navigator.pop(ctx, true);
+                              } else {
+                                setDialogState(() {
+                                  isAuthenticating = false;
+                                  errorMsg = 'Invalid credentials';
+                                });
+                              }
+                            }
+                          } catch (e) {
+                            setDialogState(() {
+                              isAuthenticating = false;
+                              errorMsg = 'Incorrect password. Authorization failed.';
+                            });
+                          }
+                        },
+                  child: isAuthenticating
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0B1B3D)),
+                        )
+                      : const Text('AUTHORIZE', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    return result == true;
+  }
+
   Future<void> _recordSalaryPayment() async {
     if (_selectedWorker == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -211,15 +404,35 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final amount = double.tryParse(_salaryAmountController.text) ?? _selectedWorker!.monthlySalary;
     if (amount <= 0) return;
 
+    final currentBalance = _getCurrentSystemBalance();
+    if (amount > currentBalance) {
+      await _showInsufficientFundsDialog(amount, currentBalance);
+      return;
+    }
+
     final currentMonthYear = DateFormat('MMMM yyyy').format(DateTime.now());
     final confirmed = await _showConfirmationDialog(
       title: 'Confirm Salary Payment',
       content: 'Pay monthly salary of Rs. ${NumberFormat('#,###.00').format(amount)} to ${_selectedWorker!.name} for $currentMonthYear?',
-      confirmText: 'PAY SALARY',
+      confirmText: 'PROCEED TO AUTH',
       confirmColor: const Color(0xFFEF4444),
     );
 
     if (!confirmed) return;
+
+    if (!mounted) return;
+    final authorized = await _promptAdminPasswordConfirmation(context);
+    if (!authorized) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Salary payment cancelled: Admin authentication required.'),
+            backgroundColor: AppColors.darkRed,
+          ),
+        );
+      }
+      return;
+    }
 
     final db = ref.read(databaseServiceProvider);
     await db.recordSalaryPayment(
@@ -236,7 +449,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Salary payment recorded for ${_selectedWorker?.name ?? "worker"}'),
+          content: Text('Salary payment authorized and recorded for ${_selectedWorker?.name ?? "worker"}'),
           backgroundColor: AppColors.darkGreen,
         ),
       );
@@ -252,25 +465,47 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       return;
     }
 
-    final isVehicle = _selectedMaintVehicle != null;
+    final currentBalance = _getCurrentSystemBalance();
+    if (cost > currentBalance) {
+      await _showInsufficientFundsDialog(cost, currentBalance);
+      return;
+    }
+
+    final isVehicle = _maintenanceMode == 'Vehicle Maintenance';
+    if (isVehicle && _selectedMaintVehicle == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a vehicle for vehicle maintenance'), backgroundColor: AppColors.darkRed),
+      );
+      return;
+    }
+
+    final customDesc = _maintTitleController.text.trim();
+    if (!isVehicle && customDesc.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter maintenance title or equipment name'), backgroundColor: AppColors.darkRed),
+      );
+      return;
+    }
+
     final vehicleReg = isVehicle ? _selectedMaintVehicle!.regNumber : '';
     final vehicleId = isVehicle ? _selectedMaintVehicle!.vehicleId : '';
-    final type = isVehicle ? _maintType : 'General Farm Maintenance';
-    final customDesc = _maintTitleController.text.trim();
-    final description = customDesc.isNotEmpty ? customDesc : type;
-    final odometer = int.tryParse(_maintOdometerController.text.trim());
-    final driverName = _selectedMaintDriverName ?? '';
-    final driverId = _selectedMaintDriverId ?? '';
+    final type = isVehicle ? _maintType : 'Factory Maintenance';
+    final description = isVehicle
+        ? (customDesc.isNotEmpty ? customDesc : type)
+        : customDesc;
+    final odometer = isVehicle ? int.tryParse(_maintOdometerController.text.trim()) : null;
+    final driverName = isVehicle ? (_selectedMaintDriverName ?? '') : '';
+    final driverId = isVehicle ? (_selectedMaintDriverId ?? '') : '';
     final note = _maintNoteController.text.trim();
 
     final confirmContent = isVehicle
-        ? 'Record maintenance expense for vehicle $vehicleReg ($type)?\n'
+        ? 'Record vehicle maintenance expense for $vehicleReg ($type)?\n'
             '• Description: $description\n'
             '• Driver: ${driverName.isNotEmpty ? driverName : "N/A"}\n'
             '${odometer != null ? "• Odometer: $odometer km\n" : ""}'
             '• Total Cost: Rs. ${NumberFormat('#,###.00').format(cost)}'
-        : 'Record general farm maintenance expense?\n'
-            '• Description: $description\n'
+        : 'Record factory infrastructure maintenance expense?\n'
+            '• Maintenance Title: $description\n'
             '${note.isNotEmpty ? "• Notes: $note\n" : ""}'
             '• Total Cost: Rs. ${NumberFormat('#,###.00').format(cost)}';
 
@@ -310,7 +545,10 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Maintenance expense recorded and synced!'), backgroundColor: AppColors.darkGreen),
+        SnackBar(
+          content: Text(isVehicle ? 'Vehicle maintenance expense recorded and synced!' : 'Factory maintenance expense recorded and synced!'),
+          backgroundColor: AppColors.darkGreen,
+        ),
       );
     }
   }
@@ -320,6 +558,12 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final qty = int.tryParse(_foodMedQtyController.text) ?? 1;
     final cost = double.tryParse(_foodMedCostController.text) ?? 0.0;
     if (name.isEmpty || cost <= 0) return;
+
+    final currentBalance = _getCurrentSystemBalance();
+    if (cost > currentBalance) {
+      await _showInsufficientFundsDialog(cost, currentBalance);
+      return;
+    }
 
     final confirmed = await _showConfirmationDialog(
       title: 'Confirm $_foodMedType Purchase',
@@ -792,6 +1036,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       }
     }
     final availableDrivers = driverSet.toList();
+    final isVehicleMode = _maintenanceMode == 'Vehicle Maintenance';
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -806,47 +1051,140 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           const Text('LOG MAINTENANCE / REPAIR EXPENSE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           const SizedBox(height: 14),
 
-          // Vehicle Selector Dropdown
-          DropdownButtonFormField<String?>(
-            value: vehicles.any((v) => v.vehicleId == _selectedMaintVehicle?.vehicleId) ? _selectedMaintVehicle?.vehicleId : null,
-            dropdownColor: isDark ? const Color(0xFF0B1B3D) : Colors.white,
-            style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0B1B3D)),
-            decoration: InputDecoration(
-              labelText: 'Target Equipment / Vehicle',
-              prefixIcon: const Icon(Icons.directions_car_rounded, color: AppColors.darkPrimaryGold, size: 20),
-              fillColor: isDark ? const Color(0xFF0B1B3D) : const Color(0xFFF1F5F9),
+          // Dual Maintenance Modes Toggle
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0B1B3D) : const Color(0xFFE2E8F0),
+              borderRadius: BorderRadius.circular(12),
             ),
-            items: [
-              const DropdownMenuItem<String?>(
-                value: null,
-                child: Text('General Farm Maintenance (No Vehicle)'),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _maintenanceMode = 'Vehicle Maintenance';
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isVehicleMode ? AppColors.darkPrimaryGold : Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.directions_car_rounded,
+                            size: 16,
+                            color: isVehicleMode ? const Color(0xFF0B1B3D) : (isDark ? Colors.white70 : Colors.black87),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Vehicle Maintenance',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isVehicleMode ? const Color(0xFF0B1B3D) : (isDark ? Colors.white70 : Colors.black87),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _maintenanceMode = 'Factory Maintenance';
+                        _selectedMaintVehicle = null;
+                        _selectedMaintDriverName = null;
+                        _selectedMaintDriverId = null;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: !isVehicleMode ? AppColors.darkPrimaryGold : Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.factory_rounded,
+                            size: 16,
+                            color: !isVehicleMode ? const Color(0xFF0B1B3D) : (isDark ? Colors.white70 : Colors.black87),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Factory Maintenance',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: !isVehicleMode ? const Color(0xFF0B1B3D) : (isDark ? Colors.white70 : Colors.black87),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          if (isVehicleMode) ...[
+            // Vehicle Selector Dropdown
+            DropdownButtonFormField<String?>(
+              value: vehicles.any((v) => v.vehicleId == _selectedMaintVehicle?.vehicleId) ? _selectedMaintVehicle?.vehicleId : null,
+              dropdownColor: isDark ? const Color(0xFF0B1B3D) : Colors.white,
+              style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0B1B3D)),
+              decoration: InputDecoration(
+                labelText: 'Select Vehicle *',
+                prefixIcon: const Icon(Icons.directions_car_rounded, color: AppColors.darkPrimaryGold, size: 20),
+                fillColor: isDark ? const Color(0xFF0B1B3D) : const Color(0xFFF1F5F9),
               ),
-              ...vehicles.map((v) => DropdownMenuItem<String?>(
-                    value: v.vehicleId,
-                    child: Text('${v.regNumber} (${v.vehicleType})'),
-                  )),
-            ],
-            onChanged: (val) {
-              setState(() {
-                if (val == null) {
-                  _selectedMaintVehicle = null;
-                  _selectedMaintDriverName = null;
-                  _selectedMaintDriverId = null;
-                } else {
-                  _selectedMaintVehicle = vehicles.firstWhere((v) => v.vehicleId == val);
-                  if (_selectedMaintVehicle!.assignedDriverNames.isNotEmpty) {
-                    _selectedMaintDriverName = _selectedMaintVehicle!.assignedDriverNames.first;
-                    if (_selectedMaintVehicle!.assignedDriverIds.isNotEmpty) {
-                      _selectedMaintDriverId = _selectedMaintVehicle!.assignedDriverIds.first;
+              items: vehicles.isEmpty
+                  ? [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('No vehicles registered in fleet', style: TextStyle(color: Colors.white70)),
+                      ),
+                    ]
+                  : vehicles.map((v) => DropdownMenuItem<String?>(
+                        value: v.vehicleId,
+                        child: Text('${v.regNumber} (${v.vehicleType})'),
+                      )).toList(),
+              onChanged: (val) {
+                setState(() {
+                  if (val == null) {
+                    _selectedMaintVehicle = null;
+                    _selectedMaintDriverName = null;
+                    _selectedMaintDriverId = null;
+                  } else {
+                    final matched = vehicles.where((v) => v.vehicleId == val).toList();
+                    if (matched.isNotEmpty) {
+                      _selectedMaintVehicle = matched.first;
+                      if (_selectedMaintVehicle!.assignedDriverNames.isNotEmpty) {
+                        _selectedMaintDriverName = _selectedMaintVehicle!.assignedDriverNames.first;
+                        if (_selectedMaintVehicle!.assignedDriverIds.isNotEmpty) {
+                          _selectedMaintDriverId = _selectedMaintVehicle!.assignedDriverIds.first;
+                        }
+                      }
                     }
                   }
-                }
-              });
-            },
-          ),
-          const SizedBox(height: 12),
+                });
+              },
+            ),
+            const SizedBox(height: 12),
 
-          if (_selectedMaintVehicle != null) ...[
             // Vehicle Maintenance Type
             DropdownButtonFormField<String>(
               value: _maintType,
@@ -926,8 +1264,10 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
             controller: _maintTitleController,
             style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0B1B3D)),
             decoration: InputDecoration(
-              labelText: _selectedMaintVehicle != null ? 'Work Description / Replaced Parts' : 'Maintenance Title / Equipment (e.g. Water Pump)',
-              prefixIcon: const Icon(Icons.description_rounded, color: AppColors.darkPrimaryGold, size: 20),
+              labelText: isVehicleMode
+                  ? 'Work Description / Replaced Parts'
+                  : 'Equipment / Maintenance Title (e.g. Water Pump, Brooder Unit) *',
+              prefixIcon: Icon(isVehicleMode ? Icons.description_rounded : Icons.precision_manufacturing_rounded, color: AppColors.darkPrimaryGold, size: 20),
               fillColor: isDark ? const Color(0xFF0B1B3D) : const Color(0xFFF1F5F9),
             ),
           ),
@@ -938,7 +1278,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
             keyboardType: TextInputType.number,
             style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0B1B3D)),
             decoration: InputDecoration(
-              labelText: 'Total Cost (Rs.)',
+              labelText: 'Total Cost (Rs.) *',
               prefixText: 'Rs. ',
               prefixIcon: const Icon(Icons.payments_rounded, color: AppColors.darkPrimaryGold, size: 20),
               fillColor: isDark ? const Color(0xFF0B1B3D) : const Color(0xFFF1F5F9),
@@ -967,7 +1307,10 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('+ RECORD MAINTENANCE EXPENSE', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: Text(
+                isVehicleMode ? '+ RECORD VEHICLE MAINTENANCE' : '+ RECORD FACTORY MAINTENANCE',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ),
         ],

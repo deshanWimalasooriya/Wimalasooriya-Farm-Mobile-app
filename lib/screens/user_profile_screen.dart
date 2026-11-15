@@ -20,7 +20,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
   late TextEditingController _nicController;
-  late TextEditingController _branchController;
   String _selectedRole = 'Admin / Manager';
 
   bool _initialized = false;
@@ -34,7 +33,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     _emailController = TextEditingController();
     _phoneController = TextEditingController();
     _nicController = TextEditingController();
-    _branchController = TextEditingController();
   }
 
   @override
@@ -43,7 +41,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _nicController.dispose();
-    _branchController.dispose();
     super.dispose();
   }
 
@@ -54,90 +51,34 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       _emailController.text = user.email;
       _phoneController.text = user.phone;
       _nicController.text = user.nic;
-      _branchController.text = user.farmBranch;
       _initialized = true;
     }
+  }
+
+  String? _validateNIC(String? val) {
+    if (val == null || val.trim().isEmpty) return 'NIC cannot be empty';
+    final trimmed = val.trim();
+    final nicRegex = RegExp(r'^(?:[0-9]{9}[vVxX]|[0-9]{12})$');
+    if (!nicRegex.hasMatch(trimmed)) {
+      return 'Enter valid Sri Lankan NIC (9 digits+V/X or 12 digits)';
+    }
+    return null;
+  }
+
+  String? _validatePhone(String? val) {
+    if (val == null || val.trim().isEmpty) return 'Phone number cannot be empty';
+    final cleaned = val.trim().replaceAll(' ', '');
+    final phoneRegex = RegExp(r'^(?:0\d{9}|\+94\d{9})$');
+    if (!phoneRegex.hasMatch(cleaned)) {
+      return 'Enter valid Sri Lankan phone (e.g. 0771234567 or +94771234567)';
+    }
+    return null;
   }
 
   String _generateStrongPassword({int length = 12}) {
     const chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#%&*';
     final rand = Random.secure();
     return List.generate(length, (_) => chars[rand.nextInt(chars.length)]).join();
-  }
-
-  void _showAddRoleDialog(BuildContext context) {
-    final roleCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF16264C),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Row(
-            children: [
-              Icon(Icons.add_moderator_rounded, color: AppColors.darkPrimaryGold),
-              SizedBox(width: 10),
-              Text('Create New Role', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: TextField(
-            controller: roleCtrl,
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-              labelText: 'Role Title (e.g. Field Agronomist)',
-              labelStyle: TextStyle(color: Colors.white70),
-              fillColor: Color(0xFF0B1B3D),
-              filled: true,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.darkPrimaryGold,
-                foregroundColor: const Color(0xFF0B1B3D),
-              ),
-              onPressed: () async {
-                final text = roleCtrl.text.trim();
-                if (text.isEmpty) return;
-
-                // Confirmation alert before write
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (c) => AlertDialog(
-                    backgroundColor: const Color(0xFF16264C),
-                    title: const Text('Confirm Role Creation', style: TextStyle(color: Colors.white)),
-                    content: Text('Add "$text" to the farm roles registry?', style: const TextStyle(color: Colors.white70)),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-                      ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('CONFIRM')),
-                    ],
-                  ),
-                );
-
-                if (confirm != true) return;
-
-                final db = ref.read(databaseServiceProvider);
-                await db.addRole(text);
-
-                setState(() => _selectedRole = text);
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Role "$text" added successfully!'), backgroundColor: AppColors.darkGreen),
-                  );
-                }
-              },
-              child: const Text('SAVE ROLE', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   Future<void> _saveProfile(AppUser currentUser) async {
@@ -174,7 +115,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         email: currentUser.email, // Preserve locked username / email
         phone: _phoneController.text.trim(),
         nic: _nicController.text.trim(),
-        farmBranch: _branchController.text.trim(),
+        farmBranch: currentUser.farmBranch,
         avatarUrl: currentUser.avatarUrl,
         visiblePassword: currentUser.visiblePassword,
         hasChangedPassword: currentUser.hasChangedPassword,
@@ -377,13 +318,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final userAsync = ref.watch(currentUserStreamProvider);
-    final rolesAsync = ref.watch(rolesStreamProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final uniqueRoles = List<String>.from(rolesAsync.value ?? ['Manager', 'Supervisor', 'Collector', 'Driver']).toSet().toList();
-    if (_selectedRole.isNotEmpty && !uniqueRoles.contains(_selectedRole)) {
-      uniqueRoles.add(_selectedRole);
-    }
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackgroundWarm,
@@ -510,41 +445,14 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Dynamic Role Selector with + Add New Role Button
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: uniqueRoles.contains(_selectedRole) ? _selectedRole : (uniqueRoles.isNotEmpty ? uniqueRoles.first : null),
-                          dropdownColor: const Color(0xFF0B1B3D),
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                          decoration: InputDecoration(
-                            labelText: 'Role / Designation',
-                            labelStyle: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
-                            prefixIcon: const Icon(Icons.badge_outlined, color: AppColors.darkPrimaryGold),
-                            fillColor: isDark ? const Color(0xFF16264C) : Colors.white,
-                            filled: true,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          items: uniqueRoles.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
-                          onChanged: (val) {
-                            if (val != null) setState(() => _selectedRole = val);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppColors.darkPrimaryGold,
-                          foregroundColor: const Color(0xFF0B1B3D),
-                          padding: const EdgeInsets.all(12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        icon: const Icon(Icons.add_rounded),
-                        tooltip: 'Add New Role',
-                        onPressed: () => _showAddRoleDialog(context),
-                      ),
-                    ],
+                  // Static Locked Admin Role
+                  _buildTextField(
+                    controller: TextEditingController(text: user.role),
+                    label: 'Role / Designation (Locked)',
+                    icon: Icons.shield_rounded,
+                    isDark: isDark,
+                    readOnly: true,
+                    helperText: 'System Administrator role is fixed and cannot be modified.',
                   ),
                   const SizedBox(height: 14),
 
@@ -565,6 +473,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                     icon: Icons.phone_outlined,
                     isDark: isDark,
                     keyboardType: TextInputType.phone,
+                    validator: _validatePhone,
                   ),
                   const SizedBox(height: 14),
 
@@ -573,14 +482,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                     label: 'NIC Number',
                     icon: Icons.credit_card_outlined,
                     isDark: isDark,
-                  ),
-                  const SizedBox(height: 14),
-
-                  _buildTextField(
-                    controller: _branchController,
-                    label: 'Farm Branch / Address',
-                    icon: Icons.location_on_outlined,
-                    isDark: isDark,
+                    validator: _validateNIC,
                   ),
                   const SizedBox(height: 20),
 
@@ -642,6 +544,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     bool readOnly = false,
     String? helperText,
     TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
@@ -686,10 +589,11 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           ),
         ),
       ),
-      validator: (val) {
-        if (!readOnly && (val == null || val.trim().isEmpty)) return '$label cannot be empty';
-        return null;
-      },
+      validator: validator ??
+          (val) {
+            if (!readOnly && (val == null || val.trim().isEmpty)) return '$label cannot be empty';
+            return null;
+          },
     );
   }
 }

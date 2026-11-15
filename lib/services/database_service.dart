@@ -18,6 +18,7 @@ class DatabaseService {
   CollectionReference get bulkOrdersCollection => _firestore.collection('bulk_orders');
   CollectionReference get vehiclesCollection => _firestore.collection('vehicles');
   CollectionReference get vehicleGroupsCollection => _firestore.collection('vehicle_groups');
+  CollectionReference get farmSettingsCollection => _firestore.collection('farm_settings');
 
   // ==================== USER PROFILE ====================
   Stream<AppUser> streamCurrentUser([String? uid]) {
@@ -232,6 +233,17 @@ class DatabaseService {
       'timestamp': FieldValue.serverTimestamp(),
       'loggedBy': loggedBy,
     });
+
+    // 3. Deduct sold quantity from farm_metrics current document so egg inventory remains accurate
+    final metricsDoc = farmMetricsCollection.doc('current');
+    batch.set(
+      metricsDoc,
+      {
+        'todayEggCount': FieldValue.increment(-count),
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
 
     await batch.commit();
   }
@@ -717,6 +729,79 @@ class DatabaseService {
       return snapshot.docs.map((doc) {
         return VehicleMaintenanceLog.fromMap(doc.data(), doc.id);
       }).toList();
+    });
+  }
+
+  // ==================== FARM SETTINGS ====================
+  Stream<FarmSettings> streamFarmSettings() {
+    return farmSettingsCollection.doc('main_settings').snapshots().map((doc) {
+      if (doc.exists && doc.data() != null) {
+        return FarmSettings.fromMap(doc.data() as Map<String, dynamic>);
+      }
+      return FarmSettings();
+    });
+  }
+
+  Future<void> saveFarmSettings(FarmSettings settings) async {
+    await farmSettingsCollection.doc('main_settings').set(settings.toMap(), SetOptions(merge: true));
+    // Also keep unitEggPrice synced in farmMetricsCollection current doc
+    await farmMetricsCollection.doc('current').set({
+      'unitEggPrice': settings.unitEggPrice,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  // ==================== DANGER ZONE / ADMIN OPERATIONS ====================
+  Future<void> clearAllDailyTasks() async {
+    final snapshot = await dailyTasksCollection.get();
+    final docs = snapshot.docs;
+    for (var i = 0; i < docs.length; i += 400) {
+      final end = (i + 400 < docs.length) ? i + 400 : docs.length;
+      final batch = _firestore.batch();
+      for (var j = i; j < end; j++) {
+        batch.delete(docs[j].reference);
+      }
+      await batch.commit();
+    }
+  }
+
+  Future<void> factoryResetDatabase() async {
+    // List of farm operational collections to completely clear.
+    // CRITICAL: NEVER delete the 'users' collection or Admin profile!
+    final collectionsToClear = [
+      flockLedgerCollection,
+      eggLogsCollection,
+      feedMedicineCollection,
+      financialLedgerCollection,
+      workersCollection,
+      laborGroupsCollection,
+      salaryPaymentsCollection,
+      dailyTasksCollection,
+      bulkOrdersCollection,
+      vehiclesCollection,
+      vehicleGroupsCollection,
+    ];
+
+    for (final col in collectionsToClear) {
+      final snapshot = await col.get();
+      final docs = snapshot.docs;
+      for (var i = 0; i < docs.length; i += 400) {
+        final end = (i + 400 < docs.length) ? i + 400 : docs.length;
+        final batch = _firestore.batch();
+        for (var j = i; j < end; j++) {
+          batch.delete(docs[j].reference);
+        }
+        await batch.commit();
+      }
+    }
+
+    // Reset farm metrics to zero state
+    await farmMetricsCollection.doc('current').set({
+      'currentHenCount': 0,
+      'todayEggCount': 0,
+      'feedPacketStock': 0,
+      'unitEggPrice': 40.0,
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 }

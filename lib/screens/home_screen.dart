@@ -23,7 +23,14 @@ class HomeScreen extends ConsumerWidget {
     }
   }
 
-  void _showNotificationSheet(BuildContext context, List<Map<String, dynamic>> vehicleAlerts, bool isFeedLow, int feedStock) {
+  void _showNotificationSheet(
+    BuildContext context,
+    List<Map<String, dynamic>> vehicleAlerts,
+    bool isFeedLow,
+    int feedStock,
+    bool isHenLow,
+    int henCount,
+  ) {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF16264C),
@@ -43,7 +50,7 @@ class HomeScreen extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              if (vehicleAlerts.isEmpty && !isFeedLow)
+              if (vehicleAlerts.isEmpty && !isFeedLow && !isHenLow)
                 const Center(
                   child: Padding(
                     padding: EdgeInsets.all(24.0),
@@ -56,6 +63,23 @@ class HomeScreen extends ConsumerWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (isHenLow)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF8B1E1E).withOpacity(0.4),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFDC2626)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.warning_rounded, color: Color(0xFFEF4444)),
+                                const SizedBox(width: 10),
+                                Expanded(child: Text('Low Hen Count: Only $henCount live hens remaining!', style: const TextStyle(color: Colors.white))),
+                              ],
+                            ),
+                          ),
                         if (isFeedLow)
                           Container(
                             margin: const EdgeInsets.only(bottom: 10),
@@ -171,8 +195,8 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  void _confirmDeleteTask(BuildContext context, WidgetRef ref, DailyTask task) {
-    showDialog(
+  Future<bool> _confirmDeleteTask(BuildContext context, WidgetRef ref, DailyTask task) async {
+    final result = await showDialog<bool>(
       context: context,
       builder: (ctx) {
         return AlertDialog(
@@ -191,20 +215,22 @@ class HomeScreen extends ConsumerWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
             ),
             ElevatedButton(
               onPressed: () async {
                 final db = ref.read(databaseServiceProvider);
                 await db.deleteTask(task.id);
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Task deleted successfully'),
-                    backgroundColor: Color(0xFFEF4444),
-                  ),
-                );
+                if (ctx.mounted) Navigator.pop(ctx, true);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Task deleted successfully'),
+                      backgroundColor: Color(0xFFEF4444),
+                    ),
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFEF4444),
@@ -216,6 +242,7 @@ class HomeScreen extends ConsumerWidget {
         );
       },
     );
+    return result ?? false;
   }
 
   void _confirmToggleTask(BuildContext context, WidgetRef ref, DailyTask task) {
@@ -318,15 +345,24 @@ class HomeScreen extends ConsumerWidget {
               builder: (context, ref, _) {
                 final vehicleAlerts = ref.watch(expiringVehiclesProvider);
                 final feedStock = metricsAsync.value?.feedPacketStock ?? 0;
-                final isFeedLow = feedStock <= 150;
-                final totalAlerts = vehicleAlerts.length + (isFeedLow ? 1 : 0);
+                final henCount = metricsAsync.value?.currentHenCount ?? 0;
+                final isFeedLow = metricsAsync.value != null && feedStock > 0 && feedStock <= 150;
+                final isHenLow = metricsAsync.value != null && henCount > 0 && henCount < 100;
+                final totalAlerts = vehicleAlerts.length + (isFeedLow ? 1 : 0) + (isHenLow ? 1 : 0);
 
                 return Stack(
                   clipBehavior: Clip.none,
                   children: [
                     IconButton(
                       icon: const Icon(Icons.notifications_rounded, size: 28),
-                      onPressed: () => _showNotificationSheet(context, vehicleAlerts, isFeedLow, feedStock),
+                      onPressed: () => _showNotificationSheet(
+                        context,
+                        vehicleAlerts,
+                        isFeedLow,
+                        feedStock,
+                        isHenLow,
+                        henCount,
+                      ),
                     ),
                     if (totalAlerts > 0)
                       Positioned(
@@ -386,17 +422,36 @@ class HomeScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 20),
 
-              // Critical Alerts Banner (Bound to real inventory + vehicle documents)
+              // Critical Alerts Banner (Strictly bound to real Firestore queries; hidden if none)
               Consumer(
                 builder: (context, ref, _) {
                   final vehicleAlerts = ref.watch(expiringVehiclesProvider);
-                  return metricsAsync.when(
-                    data: (metrics) => _buildCriticalAlertsCard(metrics, vehicleAlerts, isDark),
-                    loading: () => _buildCriticalAlertsCard(null, vehicleAlerts, isDark),
-                    error: (_, __) => _buildCriticalAlertsCard(null, vehicleAlerts, isDark),
+                  final metrics = metricsAsync.value;
+                  final henCount = metrics?.currentHenCount ?? 0;
+                  final feedStock = metrics?.feedPacketStock ?? 0;
+                  final isHenLow = metrics != null && henCount > 0 && henCount < 100;
+                  final isFeedLow = metrics != null && feedStock > 0 && feedStock <= 150;
+                  final hasAlerts = vehicleAlerts.isNotEmpty || isHenLow || isFeedLow;
+
+                  if (!hasAlerts) return const SizedBox.shrink();
+
+                  return Column(
+                    children: [
+                      _buildCriticalAlertsCard(
+                        metrics,
+                        vehicleAlerts,
+                        isDark,
+                        isHenLow,
+                        isFeedLow,
+                      ),
+                      const SizedBox(height: 18),
+                    ],
                   );
                 },
               ),
+
+              // Overall Lifetime Profit KPI Card (Real-Time from transactionsStreamProvider)
+              _buildLifetimeProfitCard(context, ref, isDark),
               const SizedBox(height: 18),
 
               // Daily Snapshot Card (100% Real-Time Firebase Stream)
@@ -407,50 +462,16 @@ class HomeScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 22),
 
-              // Daily Operational Tasks Header with + Add Task Button
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'DAILY OPERATIONAL TASKS',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: () => _showAddTaskDialog(context, ref),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0x26D4AF37),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.darkPrimaryGold, width: 1),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.add, color: AppColors.darkPrimaryGold, size: 16),
-                          SizedBox(width: 4),
-                          Text(
-                            'Add Task',
-                            style: TextStyle(
-                              color: AppColors.darkPrimaryGold,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+              // Daily Operational Tasks Header (Managed in Admin Panel)
+              const Text(
+                'DAILY OPERATIONAL TASKS',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 12),
 
@@ -474,17 +495,23 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildCriticalAlertsCard(FarmMetrics? metrics, List<Map<String, dynamic>> vehicleAlerts, bool isDark) {
+  Widget _buildCriticalAlertsCard(
+    FarmMetrics? metrics,
+    List<Map<String, dynamic>> vehicleAlerts,
+    bool isDark,
+    bool isHenLow,
+    bool isFeedLow,
+  ) {
     final feedStock = metrics?.feedPacketStock ?? 0;
-    final isFeedLow = feedStock <= 150;
+    final henCount = metrics?.currentHenCount ?? 0;
 
     return Container(
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCardSurface : Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: isDark ? AppColors.darkCardBorder : AppColors.lightCardBorder,
-          width: 1,
+          color: const Color(0xFFDC2626).withOpacity(0.6),
+          width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
@@ -501,35 +528,41 @@ class HomeScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
             child: Column(
               children: [
-                if (vehicleAlerts.isNotEmpty) ...[
+                if (isHenLow)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _buildAlertItem(
+                      icon: Icons.warning_rounded,
+                      iconColor: const Color(0xFFEF4444),
+                      text: 'FLOCK ALERT: Low live hen count ($henCount hens remaining on farm)!',
+                    ),
+                  ),
+                if (isFeedLow)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _buildAlertItem(
+                      icon: Icons.inventory_2_outlined,
+                      iconColor: AppColors.warningYellow,
+                      text: 'FEED ALERT: Low inventory stock ($feedStock packets remaining)!',
+                    ),
+                  ),
+                if (vehicleAlerts.isNotEmpty)
                   ...vehicleAlerts.take(2).map((a) {
                     final isExp = a['isExpired'] == true;
                     final days = a['daysLeft'];
                     final reg = a['regNumber'];
                     final doc = a['docName'];
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.only(bottom: 8),
                       child: _buildAlertItem(
                         icon: isExp ? Icons.cancel_rounded : Icons.alarm_rounded,
                         iconColor: isExp ? const Color(0xFFEF4444) : AppColors.warningYellow,
-                        text: isExp ? 'VEHICLE ALERT: $reg $doc has EXPIRED!' : 'VEHICLE ALERT: $reg $doc expires in $days days',
+                        text: isExp
+                            ? 'VEHICLE ALERT: $reg $doc has EXPIRED!'
+                            : 'VEHICLE ALERT: $reg $doc expires in $days days',
                       ),
                     );
                   }),
-                ],
-                _buildAlertItem(
-                  icon: Icons.warning_amber_rounded,
-                  iconColor: AppColors.warningYellow,
-                  text: isFeedLow
-                      ? 'Low Stock: Layer Feed ($feedStock packets remaining)'
-                      : 'Feed Reserve Stable ($feedStock packets in inventory)',
-                ),
-                const SizedBox(height: 10),
-                _buildAlertItem(
-                  icon: Icons.local_shipping_rounded,
-                  iconColor: AppColors.darkPrimaryGold,
-                  text: 'Fleet & Logistics: ${vehicleAlerts.isEmpty ? "All vehicle documents active" : "${vehicleAlerts.length} vehicle compliance notices"}',
-                ),
               ],
             ),
           ),
@@ -725,9 +758,143 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildLifetimeProfitCard(BuildContext context, WidgetRef ref, bool isDark) {
+    final transactionsAsync = ref.watch(transactionsStreamProvider);
+    return transactionsAsync.when(
+      data: (transactions) {
+        final totalIncome = transactions
+            .where((t) => t.type == 'income')
+            .fold<double>(0.0, (sum, t) => sum + t.amount);
+        final totalExpense = transactions
+            .where((t) => t.type == 'expense')
+            .fold<double>(0.0, (sum, t) => sum + t.amount);
+        final lifetimeProfit = totalIncome - totalExpense;
+        final isPositive = lifetimeProfit >= 0;
+        final formatter = NumberFormat.currency(symbol: 'Rs. ', decimalDigits: 2);
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isPositive
+                  ? (isDark
+                      ? [const Color(0xFF0F3822), const Color(0xFF082014)]
+                      : [const Color(0xFFDCFCE7), const Color(0xFFBBF7D0)])
+                  : (isDark
+                      ? [const Color(0xFF4A1515), const Color(0xFF2B0A0A)]
+                      : [const Color(0xFFFEE2E2), const Color(0xFFFECACA)]),
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isPositive ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: (isPositive ? const Color(0xFF22C55E) : const Color(0xFFEF4444)).withOpacity(0.15),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: (isPositive ? const Color(0xFF22C55E) : const Color(0xFFEF4444)).withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isPositive ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                  color: isPositive ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'OVERALL LIFETIME PROFIT',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                        color: isDark ? Colors.white70 : const Color(0xFF475569),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        formatter.format(lifetimeProfit),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: isPositive
+                              ? (isDark ? const Color(0xFF4ADE80) : const Color(0xFF15803D))
+                              : (isDark ? const Color(0xFFF87171) : const Color(0xFFB91C1C)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'In: ${NumberFormat.compactSimpleCurrency(name: 'Rs. ').format(totalIncome)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF166534),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Out: ${NumberFormat.compactSimpleCurrency(name: 'Rs. ').format(totalExpense)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+      loading: () => Container(
+        height: 70,
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkCardSurface : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.darkPrimaryGold),
+          ),
+        ),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
   Widget _buildTasksList(BuildContext context, WidgetRef ref, List<DailyTask> tasks, bool isDark) {
     if (tasks.isEmpty) {
       return Container(
+        width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
         decoration: BoxDecoration(
           color: isDark ? AppColors.darkCardSurface : Colors.white,
@@ -752,7 +919,7 @@ class HomeScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Tap "+ Add Task" to schedule daily farm duties.',
+                'Operational tasks are scheduled and managed via the Admin Panel.',
                 style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
               ),
             ],
@@ -762,7 +929,7 @@ class HomeScreen extends ConsumerWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCardSurface : Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -776,42 +943,91 @@ class HomeScreen extends ConsumerWidget {
           final isCompleted = task.isCompleted;
 
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: InkWell(
-              onTap: () => _confirmToggleTask(context, ref, task),
-              borderRadius: BorderRadius.circular(10),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Dismissible(
+              key: Key(task.id),
+              direction: DismissDirection.horizontal,
+              confirmDismiss: (direction) => _confirmDeleteTask(context, ref, task),
+              background: Container(
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.delete_outline_rounded, color: Colors.white, size: 22),
+                    SizedBox(width: 8),
+                    Text('Delete Task', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+              ),
+              secondaryBackground: Container(
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text('Delete Task', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                    SizedBox(width: 8),
+                    Icon(Icons.delete_outline_rounded, color: Colors.white, size: 22),
+                  ],
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0F1E36) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: isCompleted
+                      ? Border.all(color: const Color(0xFF22C55E), width: 2)
+                      : Border.all(
+                          color: isDark ? AppColors.darkCardBorder.withOpacity(0.5) : AppColors.lightCardBorder,
+                          width: 1,
+                        ),
+                ),
                 child: Row(
                   children: [
                     // Checkbox
-                    Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(6),
-                        color: isCompleted ? AppColors.darkHarvestGold : Colors.transparent,
-                        border: Border.all(
-                          color: isCompleted ? AppColors.darkHarvestGold : const Color(0xFF64748B),
-                          width: 1.8,
+                    GestureDetector(
+                      onTap: () => _confirmToggleTask(context, ref, task),
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          color: isCompleted ? const Color(0xFF22C55E) : Colors.transparent,
+                          border: Border.all(
+                            color: isCompleted ? const Color(0xFF22C55E) : const Color(0xFF64748B),
+                            width: 1.8,
+                          ),
                         ),
+                        child: isCompleted
+                            ? const Icon(Icons.check, size: 18, color: Colors.white)
+                            : null,
                       ),
-                      child: isCompleted
-                          ? const Icon(Icons.check, size: 20, color: Color(0xFF0B1B3D))
-                          : null,
                     ),
-                    const SizedBox(width: 14),
+                    const SizedBox(width: 12),
 
                     // Task Title
                     Expanded(
-                      child: Text(
-                        task.title,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: isCompleted
-                              ? AppColors.darkPrimaryGold
-                              : (isDark ? Colors.white : AppColors.lightTextPrimary),
+                      child: GestureDetector(
+                        onTap: () => _confirmToggleTask(context, ref, task),
+                        child: Text(
+                          task.title,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            decoration: isCompleted ? TextDecoration.lineThrough : null,
+                            color: isCompleted
+                                ? const Color(0xFF22C55E)
+                                : (isDark ? Colors.white : AppColors.lightTextPrimary),
+                          ),
                         ),
                       ),
                     ),
@@ -820,6 +1036,8 @@ class HomeScreen extends ConsumerWidget {
                     IconButton(
                       icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 20),
                       tooltip: 'Delete Task',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                       onPressed: () => _confirmDeleteTask(context, ref, task),
                     ),
                   ],

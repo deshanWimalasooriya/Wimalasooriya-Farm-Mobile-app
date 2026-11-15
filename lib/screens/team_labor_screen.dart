@@ -9,6 +9,7 @@ import '../core/constants/app_assets.dart';
 import '../core/theme/app_colors.dart';
 import '../models/farm_models.dart';
 import '../providers/farm_providers.dart';
+import '../widgets/worker_id_card_preview.dart';
 
 class TeamLaborScreen extends ConsumerStatefulWidget {
   const TeamLaborScreen({super.key});
@@ -21,12 +22,16 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
   late TabController _tabController;
   final _formatter = NumberFormat('#,###');
   String _selectedCategory = 'All';
+  String? selectedSupervisor;
   final Map<String, bool> _visiblePasswords = {};
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -134,6 +139,13 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final uniqueGroups = <String, LaborGroup>{};
+            for (final g in existingGroups) {
+              uniqueGroups[g.id] = g;
+            }
+            final groupList = uniqueGroups.values.toList();
+            final validGroupId = groupList.any((g) => g.id == selectedGroupId) ? selectedGroupId : null;
+
             return AlertDialog(
               backgroundColor: const Color(0xFF16264C),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -280,13 +292,6 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                     ),
                     const SizedBox(height: 6),
 
-                    final uniqueGroups = <String, LaborGroup>{};
-                    for (final g in existingGroups) {
-                      uniqueGroups[g.id] = g;
-                    }
-                    final groupList = uniqueGroups.values.toList();
-                    final validGroupId = groupList.any((g) => g.id == selectedGroupId) ? selectedGroupId : null;
-
                     DropdownButtonFormField<String?>(
                       value: validGroupId,
                       dropdownColor: const Color(0xFF0B1B3D),
@@ -329,9 +334,37 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                   onPressed: () async {
                     if (nameCtrl.text.trim().isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter worker name')),
+                        const SnackBar(content: Text('Please enter worker name'), backgroundColor: AppColors.darkRed),
                       );
                       return;
+                    }
+
+                    final nicText = nicCtrl.text.trim();
+                    if (nicText.isNotEmpty) {
+                      final nicRegex = RegExp(r'^(?:[0-9]{9}[vVxX]|[0-9]{12})$');
+                      if (!nicRegex.hasMatch(nicText)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please enter a valid Sri Lankan NIC (9 digits+V/X or 12 digits)'),
+                            backgroundColor: AppColors.darkRed,
+                          ),
+                        );
+                        return;
+                      }
+                    }
+
+                    final phoneText = phoneCtrl.text.trim().replaceAll(' ', '');
+                    if (phoneText.isNotEmpty) {
+                      final phoneRegex = RegExp(r'^(?:0\d{9}|\+94\d{9})$');
+                      if (!phoneRegex.hasMatch(phoneText)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please enter a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567)'),
+                            backgroundColor: AppColors.darkRed,
+                          ),
+                        );
+                        return;
+                      }
                     }
 
                     // Global Confirmation Alert
@@ -432,14 +465,13 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
     final workerList = uniqueWorkers.values.toList();
 
     String? selectedSupervisorId;
-    String selectedSupervisorName = 'Farm Admin';
 
     if (workerList.isNotEmpty) {
       selectedSupervisorId = workerList.first.workerId;
-      selectedSupervisorName = workerList.first.name;
+      selectedSupervisor = workerList.first.name;
     } else {
       selectedSupervisorId = 'admin';
-      selectedSupervisorName = 'Farm Admin';
+      selectedSupervisor = 'Farm Admin';
     }
 
     showDialog(
@@ -498,7 +530,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                           setDialogState(() {
                             selectedSupervisorId = val;
                             final matched = workerList.where((w) => w.workerId == val).toList();
-                            selectedSupervisorName = matched.isNotEmpty ? matched.first.name : 'Farm Admin';
+                            selectedSupervisor = matched.isNotEmpty ? matched.first.name : 'Farm Admin';
                           });
                         }
                       },
@@ -543,7 +575,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                       builder: (c) => AlertDialog(
                         backgroundColor: const Color(0xFF16264C),
                         title: const Text('Confirm Group Creation', style: TextStyle(color: Colors.white)),
-                        content: Text('Create labor group "${nameCtrl.text.trim()}" supervised by $selectedSupervisorName?', style: const TextStyle(color: Colors.white70)),
+                        content: Text('Create labor group "${nameCtrl.text.trim()}" supervised by $selectedSupervisor?', style: const TextStyle(color: Colors.white70)),
                         actions: [
                           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
                           ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('CONFIRM')),
@@ -557,7 +589,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                     final newGroup = LaborGroup(
                       id: groupId,
                       name: nameCtrl.text.trim(),
-                      supervisor: selectedSupervisorName,
+                      supervisor: selectedSupervisor!,
                       description: descCtrl.text.trim(),
                       memberWorkerIds: [],
                     );
@@ -833,193 +865,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
 
   // ==================== PRINTABLE LANYARD ID CARD GENERATOR MODAL ====================
   void _showLanyardIdCardDialog(BuildContext context, Worker worker) {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF0F172A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          contentPadding: const EdgeInsets.all(18),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Top Badge Lanyard Slot Hole Simulation
-                Container(
-                  width: 50,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: Colors.black45,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // CR80 Portrait Badge Container
-                Container(
-                  width: 270,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0F2656), Color(0xFF0B1B3D), Color(0xFF071229)],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.darkPrimaryGold, width: 2),
-                    boxShadow: [
-                      BoxShadow(color: AppColors.darkPrimaryGold.withOpacity(0.3), blurRadius: 20, spreadRadius: 2),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      // Header: Circular Logo and Company Name
-                      Container(
-                        width: 54,
-                        height: 54,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.darkPrimaryGold, width: 2),
-                        ),
-                        child: ClipOval(
-                          child: Image.asset(AppAssets.logo, width: 54, height: 54, fit: BoxFit.cover),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'WIMALASOORIYA FARMS',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.0),
-                      ),
-                      const Text(
-                        'COMMERCIAL POULTRY ERP',
-                        style: TextStyle(color: AppColors.darkPrimaryGold, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1.2),
-                      ),
-                      const Divider(color: AppColors.darkPrimaryGold, height: 20, thickness: 1),
-
-                      // Worker Avatar
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF16264C),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: Center(
-                          child: Text(
-                            worker.name.isNotEmpty ? worker.name[0].toUpperCase() : 'W',
-                            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.darkPrimaryGold),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-
-                      // Name & ID Badge
-                      Text(
-                        worker.name,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 3),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.darkPrimaryGold,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          worker.workerId,
-                          style: const TextStyle(color: Color(0xFF0B1B3D), fontWeight: FontWeight.bold, fontSize: 12),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        worker.role.toUpperCase(),
-                        style: const TextStyle(color: AppColors.darkPrimaryGold, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.8),
-                      ),
-                      if (worker.groupName != null) ...[
-                        const SizedBox(height: 2),
-                        Text('Team: ${worker.groupName}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                      ],
-                      if (worker.nic.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text('NIC: ${worker.nic}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
-                      ],
-                      const SizedBox(height: 12),
-
-                      // QR Code
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: QrImageView(
-                          data: worker.qrPayload,
-                          version: QrVersions.auto,
-                          size: 110.0,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Footer
-                      const Text(
-                        'Main Farm — Kurunegala, Sri Lanka',
-                        style: TextStyle(color: Colors.white54, fontSize: 9),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 18),
-
-                // Action Buttons: Print PDF & Share
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.darkPrimaryGold,
-                          foregroundColor: const Color(0xFF0B1B3D),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        icon: const Icon(Icons.print_rounded, size: 18),
-                        label: const Text('PRINT PDF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: worker.qrPayload));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Lanyard badge layout sent to printing spool & payload copied to clipboard!'), backgroundColor: AppColors.darkGreen),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white30),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        icon: const Icon(Icons.share_rounded, size: 18),
-                        label: const Text('SHARE BADGE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: 'Wimalasooriya Farms ID Passport: ${worker.name} (${worker.workerId}) — ${worker.role}\nPayload: ${worker.qrPayload}'));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Badge passport payload for ${worker.name} copied ready to share via WhatsApp/Bluetooth!'), backgroundColor: AppColors.darkGreen),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    WorkerIdCardDialog.show(context, worker);
   }
 
   // ==================== QR PASSPORT DIALOG (WITH SHARING) ====================
@@ -1066,40 +912,51 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
             ],
           ),
           actions: [
-            Row(
+            Column(
               children: [
-                Expanded(
+                SizedBox(
+                  width: double.infinity,
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.darkPrimaryGold,
                       foregroundColor: const Color(0xFF0B1B3D),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     onPressed: () {
-                      Clipboard.setData(ClipboardData(text: worker.qrPayload));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('QR Code sent to print spool!'), backgroundColor: AppColors.darkGreen),
-                      );
+                      Navigator.pop(ctx);
+                      WorkerIdCardDialog.show(context, worker);
                     },
-                    icon: const Icon(Icons.print_rounded, size: 18),
-                    label: const Text('PRINT QR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    icon: const Icon(Icons.badge_rounded, size: 18),
+                    label: const Text('GENERATE FULL ID CARD', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Colors.white30),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white30),
+                        ),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: worker.qrPayload));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('QR payload copied to clipboard!'), backgroundColor: AppColors.darkGreen),
+                          );
+                        },
+                        icon: const Icon(Icons.copy_rounded, size: 16),
+                        label: const Text('COPY PAYLOAD', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                      ),
                     ),
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: worker.qrPayload));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Full QR payload copied ready to share via WhatsApp!'), backgroundColor: AppColors.darkGreen),
-                      );
-                    },
-                    icon: const Icon(Icons.share_rounded, size: 18),
-                    label: const Text('SHARE QR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Close', style: TextStyle(color: Colors.white60)),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1338,18 +1195,23 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person_add_alt_1_rounded, color: AppColors.darkPrimaryGold),
-            tooltip: 'Add Laborer',
-            onPressed: () => _showAddWorkerDialog(context, workers.length, groups, roles),
-          ),
-          IconButton(
-            icon: const Icon(Icons.group_add_rounded, color: AppColors.darkPrimaryGold),
-            tooltip: 'Create Group',
-            onPressed: () => _showCreateGroupDialog(context, workers),
-          ),
-        ],
+        actions: const [],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          if (_tabController.index == 0) {
+            _showAddWorkerDialog(context, workers.length, groups, roles);
+          } else {
+            _showCreateGroupDialog(context, workers);
+          }
+        },
+        backgroundColor: AppColors.darkPrimaryGold,
+        foregroundColor: const Color(0xFF0B1B3D),
+        icon: const Icon(Icons.add_rounded, size: 22),
+        label: Text(
+          _tabController.index == 0 ? 'Add Laborer' : 'Create Group',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       body: TabBarView(
         controller: _tabController,
@@ -1610,17 +1472,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                                     constraints: const BoxConstraints(),
                                     onPressed: () => _showResetWorkerPasswordDialog(context, w),
                                   ),
-                                  const SizedBox(width: 6),
-
-                                  // Full QR Passport Button
-                                  IconButton(
-                                    icon: const Icon(Icons.qr_code_2_rounded, color: Colors.white, size: 22),
-                                    tooltip: 'Full-Detail QR Passport',
-                                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                                    constraints: const BoxConstraints(),
-                                    onPressed: () => _showQrPassport(context, w),
-                                  ),
-                                  const SizedBox(width: 6),
+                                  const SizedBox(width: 8),
 
                                   // Generate Printable ID Card Button
                                   ElevatedButton.icon(
@@ -1628,12 +1480,12 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                                       backgroundColor: const Color(0xFF0B1B3D),
                                       foregroundColor: AppColors.darkPrimaryGold,
                                       side: const BorderSide(color: AppColors.darkPrimaryGold, width: 1),
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      minimumSize: const Size(80, 30),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      minimumSize: const Size(110, 32),
                                     ),
                                     icon: const Icon(Icons.badge_rounded, size: 14),
-                                    label: const Text('ID CARD', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                                    onPressed: () => _showLanyardIdCardDialog(context, w),
+                                    label: const Text('Generate ID Card', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                    onPressed: () => WorkerIdCardDialog.show(context, w),
                                   ),
                                 ],
                               ),

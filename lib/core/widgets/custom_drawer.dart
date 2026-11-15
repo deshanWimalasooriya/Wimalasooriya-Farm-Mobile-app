@@ -5,6 +5,7 @@ import '../theme/app_colors.dart';
 import '../theme/theme_provider.dart';
 import '../../providers/farm_providers.dart';
 import '../../screens/user_profile_screen.dart';
+import '../../screens/admin_panel_screen.dart';
 
 class CustomNavigationDrawer extends ConsumerWidget {
   final VoidCallback? onOpenTeamLabor;
@@ -38,43 +39,9 @@ class CustomNavigationDrawer extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Farm Header
+            // Manager Profile Section (Clean, Compact Header)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.darkPrimaryGold, width: 2),
-                      image: const DecorationImage(
-                        image: AssetImage(AppAssets.logo),
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  const Expanded(
-                    child: Text(
-                      'Wimalasooriya Farms',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const Divider(color: Color(0x22FFFFFF), height: 1),
-
-            // Manager Profile Section (Synced with Firebase)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -157,6 +124,17 @@ class CustomNavigationDrawer extends ConsumerWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => const UserProfileScreen()),
+                      );
+                    },
+                  ),
+                  _DrawerTile(
+                    icon: Icons.admin_panel_settings_outlined,
+                    label: 'Admin Panel',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AdminPanelScreen()),
                       );
                     },
                   ),
