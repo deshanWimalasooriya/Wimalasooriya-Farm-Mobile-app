@@ -6,6 +6,7 @@ import '../core/constants/app_assets.dart';
 import '../core/theme/app_colors.dart';
 import '../models/farm_models.dart';
 import '../providers/farm_providers.dart';
+import '../utils/app_snackbar.dart';
 
 class FlockScreen extends ConsumerStatefulWidget {
   final VoidCallback onOpenNotifications;
@@ -55,7 +56,14 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
               color: action == 'add' ? AppColors.darkGreen : const Color(0xFFEF4444),
             ),
             const SizedBox(width: 10),
-            Text('Confirm Flock $actionLabel', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text(
+                'Confirm Flock $actionLabel',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
           ],
         ),
         content: Text(
@@ -90,18 +98,21 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
         loggedBy: 'Deshan Wimalasooriya',
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Successfully recorded flock change: ${action == 'add' ? '+' : '-'}$count Hens ($_selectedReason)'),
-            backgroundColor: action == 'add' ? AppColors.darkGreen : AppColors.darkRed,
-          ),
-        );
+        if (action == 'add') {
+          AppSnackBar.showSuccess(
+            context,
+            'Successfully recorded flock change: +$count Hens ($_selectedReason)',
+          );
+        } else {
+          AppSnackBar.showInfo(
+            context,
+            'Successfully recorded flock change: -$count Hens ($_selectedReason)',
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Notice: $e'), backgroundColor: AppColors.darkRed),
-        );
+        AppSnackBar.showError(context, 'Notice: $e');
       }
     }
   }
@@ -133,13 +144,10 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
               onPressed: () async {
                 final db = ref.read(databaseServiceProvider);
                 await db.resetHenCountToZero(loggedBy: 'Deshan Wimalasooriya');
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Live hen count has been reset to 0.'),
-                    backgroundColor: Color(0xFFEF4444),
-                  ),
-                );
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  AppSnackBar.showInfo(context, 'Live hen count has been reset to 0.');
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFEF4444),
@@ -157,11 +165,14 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
   Widget build(BuildContext context) {
     final metricsAsync = ref.watch(farmMetricsStreamProvider);
     final flockLedgerAsync = ref.watch(flockLedgerStreamProvider);
+    final eggLogsAsync = ref.watch(eggLogsStreamProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currentDateStr = DateFormat('MMMM d, y').format(DateTime.now());
 
     final henCount = metricsAsync.value?.currentHenCount ?? 0;
     final formatter = NumberFormat('#,###');
+    final notifsAsync = ref.watch(adminNotificationsStreamProvider);
+    final unreadNotifsCount = notifsAsync.value?.where((n) => !n.isRead).length ?? 0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -202,18 +213,19 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
                   icon: const Icon(Icons.notifications_rounded, size: 28),
                   onPressed: widget.onOpenNotifications,
                 ),
-                Positioned(
-                  right: 10,
-                  top: 10,
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEF4444),
-                      shape: BoxShape.circle,
+                if (unreadNotifsCount > 0)
+                  Positioned(
+                    right: 10,
+                    top: 10,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEF4444),
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -244,13 +256,16 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Horizontal Pill Sub-Tabs
-            Row(
-              children: [
-                Expanded(child: _buildSubTab(0, 'Hens Inventory')),
-                const SizedBox(width: 12),
-                Expanded(child: _buildSubTab(1, 'Egg Yields')),
-              ],
+            // Horizontal Pill Sub-Tabs (Scrollable to prevent 360dp overflow)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildSubTab(0, 'Hens Inventory'),
+                  const SizedBox(width: 12),
+                  _buildSubTab(1, 'Egg Yields'),
+                ],
+              ),
             ),
             const SizedBox(height: 20),
 
@@ -267,6 +282,8 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
               _buildRecentFlockActivityCard(flockLedgerAsync, isDark),
             ] else ...[
               _buildEggYieldsSubTab(isDark, formatter),
+              const SizedBox(height: 20),
+              _buildRecentEggYieldActivityCard(eggLogsAsync, isDark, formatter),
             ],
           ],
         ),
@@ -279,7 +296,7 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
     return GestureDetector(
       onTap: () => setState(() => _selectedSubTab = index),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
           color: isSelected ? const Color(0x33D4AF37) : Colors.transparent,
@@ -290,6 +307,8 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
         ),
         child: Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 14,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
@@ -853,11 +872,18 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
                   builder: (ctx) => AlertDialog(
                     backgroundColor: const Color(0xFF16264C),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    title: const Row(
+                    title: Row(
                       children: [
-                        Icon(Icons.egg_outlined, color: AppColors.darkPrimaryGold),
-                        SizedBox(width: 10),
-                        Text('Confirm Egg Yield', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        const Icon(Icons.egg_outlined, color: AppColors.darkPrimaryGold),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Confirm Egg Yield',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
                       ],
                     ),
                     content: Text(
@@ -886,16 +912,133 @@ class _FlockScreenState extends ConsumerState<FlockScreen> {
                 final db = ref.read(databaseServiceProvider);
                 await db.recordEggProduction(producedCount: count, loggedBy: 'Deshan Wimalasooriya');
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Successfully recorded $count eggs collected today!'),
-                      backgroundColor: AppColors.darkGreen,
-                    ),
+                  AppSnackBar.showSuccess(
+                    context,
+                    'Successfully recorded $count eggs collected today!',
                   );
                 }
               },
               child: const Text('RECORD TODAY\'S EGG YIELD'),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentEggYieldActivityCard(
+    AsyncValue<List<EggLogEntry>> asyncLogs,
+    bool isDark,
+    NumberFormat formatter,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCardSurface : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark ? AppColors.darkCardBorder : AppColors.lightCardBorder,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'RECENT EGG YIELD ACTIVITY',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 14),
+          asyncLogs.when(
+            data: (rawLogs) {
+              final logs = List<EggLogEntry>.from(rawLogs)
+                ..sort((a, b) {
+                  final aTime = a.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
+                  final bTime = b.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
+                  return bTime.compareTo(aTime);
+                });
+
+              if (logs.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24.0),
+                  child: Center(
+                    child: Text(
+                      'No egg collection logs recorded yet.',
+                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                    ),
+                  ),
+                );
+              }
+
+              return Column(
+                children: logs.map<Widget>((entry) {
+                  final timeStr = entry.timestamp != null
+                      ? DateFormat('MMM d, hh:mm a').format(entry.timestamp!)
+                      : 'Today';
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: const BoxDecoration(
+                            color: Color(0x33D4AF37),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.egg_outlined,
+                            color: AppColors.darkPrimaryGold,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: RichText(
+                            text: TextSpan(
+                              style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black87),
+                              children: [
+                                TextSpan(
+                                  text: '+ ${formatter.format(entry.producedCount)} Eggs ',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.darkPrimaryGold,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: '| ${entry.loggedBy.isNotEmpty ? entry.loggedBy : 'Collection'}',
+                                  style: TextStyle(color: isDark ? const Color(0xFFCBD5E1) : Colors.black54),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          timeStr,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? const Color(0xFF94A3B8) : Colors.black45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(color: AppColors.darkPrimaryGold),
+              ),
+            ),
+            error: (err, _) => const Text('Error loading egg yield activity'),
           ),
         ],
       ),

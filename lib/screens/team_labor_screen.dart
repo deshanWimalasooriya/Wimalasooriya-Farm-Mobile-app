@@ -10,6 +10,7 @@ import '../core/theme/app_colors.dart';
 import '../models/farm_models.dart';
 import '../providers/farm_providers.dart';
 import '../widgets/worker_id_card_preview.dart';
+import '../utils/app_snackbar.dart';
 
 class TeamLaborScreen extends ConsumerStatefulWidget {
   const TeamLaborScreen({super.key});
@@ -107,9 +108,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
 
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Role "$text" added successfully!'), backgroundColor: AppColors.darkGreen),
-                  );
+                  AppSnackBar.showSuccess(context, 'Role "$text" added successfully!');
                 }
               },
               child: const Text('SAVE ROLE', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -120,10 +119,69 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
     );
   }
 
+  void _showTopLayerToast(BuildContext context, String message, {bool isError = true}) {
+    final overlay = Overlay.of(context, rootOverlay: true);
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.of(context).padding.top + 16,
+        left: 20,
+        right: 20,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: isError ? const Color(0xFF7F1D1D) : const Color(0xFF064E3B),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isError ? const Color(0xFFEF4444) : const Color(0xFF22C55E),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isError ? Icons.error_rounded : Icons.check_circle_rounded,
+                  color: isError ? const Color(0xFFEF4444) : const Color(0xFF22C55E),
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 4), () {
+      if (entry.mounted) entry.remove();
+    });
+  }
+
   // ==================== ADD WORKER MODAL ====================
   void _showAddWorkerDialog(BuildContext context, int currentWorkerCount, List<LaborGroup> existingGroups, List<String> availableRoles) {
     final nextId = 'WF-EMP-${(currentWorkerCount + 1).toString().padLeft(3, '0')}';
     final nameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController(text: '${nextId.toLowerCase().replaceAll("-", "")}@wimalasooriya.farm');
     final ageCtrl = TextEditingController(text: '28');
     final nicCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
@@ -133,6 +191,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
     if (uniqueRoles.isEmpty) uniqueRoles.add('Collector');
     String role = uniqueRoles.first;
     String? selectedGroupId;
+    String? inlineError;
 
     showDialog(
       context: context,
@@ -153,13 +212,49 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                 children: [
                   const Icon(Icons.person_add_alt_1_rounded, color: AppColors.darkPrimaryGold),
                   const SizedBox(width: 10),
-                  Text('Add Worker ($nextId)', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Expanded(
+                    child: Text(
+                      'Add Worker ($nextId)',
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
                 ],
               ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (inlineError != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEF4444).withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFEF4444), width: 1.2),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444), size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                inlineError!,
+                                style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            InkWell(
+                              onTap: () => setDialogState(() => inlineError = null),
+                              child: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFFCA5A5)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     TextField(
                       controller: nameCtrl,
                       style: const TextStyle(color: Colors.white),
@@ -168,6 +263,19 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                         labelStyle: TextStyle(color: Colors.white70),
                         fillColor: Color(0xFF0B1B3D),
                         filled: true,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        labelText: 'Employee Login Email *',
+                        labelStyle: TextStyle(color: Colors.white70),
+                        fillColor: Color(0xFF0B1B3D),
+                        filled: true,
+                        prefixIcon: Icon(Icons.email_outlined, color: AppColors.darkPrimaryGold, size: 20),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -333,9 +441,9 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                   ),
                   onPressed: () async {
                     if (nameCtrl.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter worker name'), backgroundColor: AppColors.darkRed),
-                      );
+                      const msg = 'Please enter worker name';
+                      setDialogState(() => inlineError = msg);
+                      _showTopLayerToast(context, msg, isError: true);
                       return;
                     }
 
@@ -343,12 +451,9 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                     if (nicText.isNotEmpty) {
                       final nicRegex = RegExp(r'^(?:[0-9]{9}[vVxX]|[0-9]{12})$');
                       if (!nicRegex.hasMatch(nicText)) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please enter a valid Sri Lankan NIC (9 digits+V/X or 12 digits)'),
-                            backgroundColor: AppColors.darkRed,
-                          ),
-                        );
+                        const msg = 'Please enter a valid Sri Lankan NIC (9 digits+V/X or 12 digits)';
+                        setDialogState(() => inlineError = msg);
+                        _showTopLayerToast(context, msg, isError: true);
                         return;
                       }
                     }
@@ -357,14 +462,27 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                     if (phoneText.isNotEmpty) {
                       final phoneRegex = RegExp(r'^(?:0\d{9}|\+94\d{9})$');
                       if (!phoneRegex.hasMatch(phoneText)) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please enter a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567)'),
-                            backgroundColor: AppColors.darkRed,
-                          ),
-                        );
+                        const msg = 'Please enter a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567)';
+                        setDialogState(() => inlineError = msg);
+                        _showTopLayerToast(context, msg, isError: true);
                         return;
                       }
+                    }
+
+                    final emailText = emailCtrl.text.trim();
+                    if (emailText.isNotEmpty && (!emailText.contains('@') || !emailText.contains('.'))) {
+                      const msg = 'Please enter a valid email address';
+                      setDialogState(() => inlineError = msg);
+                      _showTopLayerToast(context, msg, isError: true);
+                      return;
+                    }
+
+                    final passText = passwordCtrl.text.trim();
+                    if (passText.length < 6) {
+                      const msg = 'Password must be at least 6 characters long';
+                      setDialogState(() => inlineError = msg);
+                      _showTopLayerToast(context, msg, isError: true);
+                      return;
                     }
 
                     // Global Confirmation Alert
@@ -372,8 +490,20 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                       context: context,
                       builder: (c) => AlertDialog(
                         backgroundColor: const Color(0xFF16264C),
-                        title: const Text('Confirm Worker Registration', style: TextStyle(color: Colors.white)),
-                        content: Text('Register ${nameCtrl.text.trim()} as $role ($nextId) in Firestore?', style: const TextStyle(color: Colors.white70)),
+                        title: const Row(
+                          children: [
+                            Icon(Icons.how_to_reg_rounded, color: AppColors.darkPrimaryGold),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Confirm Worker Registration',
+                                style: TextStyle(color: Colors.white, fontSize: 16),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        content: Text('Register ${nameCtrl.text.trim()} as $role ($nextId) with secure login credentials?', style: const TextStyle(color: Colors.white70)),
                         actions: [
                           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
                           ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('CONFIRM')),
@@ -386,6 +516,9 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                     final salary = double.tryParse(salaryCtrl.text) ?? 50000.0;
                     final age = int.tryParse(ageCtrl.text) ?? 25;
                     final password = passwordCtrl.text.trim();
+                    final email = emailCtrl.text.trim().isNotEmpty 
+                        ? emailCtrl.text.trim() 
+                        : '${nextId.toLowerCase().replaceAll("-", "")}@wimalasooriya.farm';
 
                     String? assignedGroupName;
                     if (selectedGroupId != null) {
@@ -400,46 +533,49 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                       'nic': nicCtrl.text.trim(),
                       'role': role,
                       'phone': phoneCtrl.text.trim(),
+                      'email': email,
                       'groupName': assignedGroupName ?? 'None',
                       'monthlySalary': salary,
                       'joinedDate': DateTime.now().toIso8601String().substring(0, 10),
                     });
 
-                    final newWorker = Worker(
-                      workerId: nextId,
-                      name: nameCtrl.text.trim(),
-                      age: age,
-                      nic: nicCtrl.text.trim(),
-                      phone: phoneCtrl.text.trim(),
-                      role: role,
-                      monthlySalary: salary,
-                      groupId: selectedGroupId,
-                      groupName: assignedGroupName,
-                      qrPayload: fullPayload,
-                      visiblePassword: password.isNotEmpty ? password : null,
-                      hasChangedPassword: false, // State 1: Newly created, visible to admin
-                      joinedDate: DateTime.now(),
-                    );
-
                     final db = ref.read(databaseServiceProvider);
-                    await db.addWorker(newWorker);
-
-                    if (selectedGroupId != null && assignedGroupName != null) {
-                      await db.assignWorkerToGroup(
+                    try {
+                      final result = await db.createEmployeeWithAuth(
                         workerId: nextId,
-                        groupId: selectedGroupId!,
+                        name: nameCtrl.text.trim(),
+                        email: email,
+                        role: role,
+                        phone: phoneCtrl.text.trim(),
+                        nic: nicCtrl.text.trim(),
+                        age: age,
+                        monthlySalary: salary,
+                        groupId: selectedGroupId,
                         groupName: assignedGroupName,
+                        qrPayload: fullPayload,
+                        initialPassword: password,
                       );
-                    }
 
-                    if (ctx.mounted) Navigator.pop(ctx);
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Registered $role: ${newWorker.name} ($nextId)'),
-                          backgroundColor: AppColors.darkGreen,
-                        ),
-                      );
+                      if (selectedGroupId != null && assignedGroupName != null) {
+                        await db.assignWorkerToGroup(
+                          workerId: nextId,
+                          groupId: selectedGroupId!,
+                          groupName: assignedGroupName,
+                        );
+                      }
+
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (mounted) {
+                        AppSnackBar.showSuccess(
+                          context,
+                          'Registered $role: ${nameCtrl.text.trim()} ($nextId) | Password: ${result['password']}',
+                          duration: const Duration(seconds: 5),
+                        );
+                      }
+                    } catch (e) {
+                      final errorString = e.toString().replaceFirst('Exception: ', '');
+                      setDialogState(() => inlineError = errorString);
+                      _showTopLayerToast(context, errorString, isError: true);
                     }
                   },
                   child: const Text('ADD WORKER', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -563,9 +699,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                   ),
                   onPressed: () async {
                     if (nameCtrl.text.trim().isEmpty || selectedSupervisor == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter Group Name and select a Supervisor')),
-                      );
+                      AppSnackBar.showError(context, 'Please enter Group Name and select a Supervisor');
                       return;
                     }
 
@@ -599,11 +733,9 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
 
                     if (ctx.mounted) Navigator.pop(ctx);
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Created Labor Group "${newGroup.name}"'),
-                          backgroundColor: AppColors.darkGreen,
-                        ),
+                      AppSnackBar.showSuccess(
+                        context,
+                        'Created Labor Group "${newGroup.name}"',
                       );
                     }
                   },
@@ -627,9 +759,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
     final eligibleList = uniqueEligible.values.toList();
 
     if (eligibleList.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All registered workers are already assigned to this group!')),
-      );
+      AppSnackBar.showInfo(context, 'All registered workers are already assigned to this group!');
       return;
     }
 
@@ -723,11 +853,9 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
 
                     if (ctx.mounted) Navigator.pop(ctx);
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Worker assigned to "${group.name}"'),
-                          backgroundColor: AppColors.darkGreen,
-                        ),
+                      AppSnackBar.showSuccess(
+                        context,
+                        'Worker assigned to "${group.name}"',
                       );
                     }
                   },
@@ -819,7 +947,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                   ),
                   onPressed: () async {
                     if (newPasswordCtrl.text.trim().isEmpty || newPasswordCtrl.text != confirmPasswordCtrl.text) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwords must match!')));
+                      AppSnackBar.showError(context, 'Passwords must match!');
                       return;
                     }
 
@@ -848,8 +976,9 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
 
                     if (ctx.mounted) Navigator.pop(ctx);
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Password updated for ${worker.name} (Visible to admin)'), backgroundColor: AppColors.darkGreen),
+                      AppSnackBar.showSuccess(
+                        context,
+                        'Password updated for ${worker.name} (Visible to admin)',
                       );
                     }
                   },
@@ -941,9 +1070,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                         ),
                         onPressed: () {
                           Clipboard.setData(ClipboardData(text: worker.qrPayload));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('QR payload copied to clipboard!'), backgroundColor: AppColors.darkGreen),
-                          );
+                          AppSnackBar.showSuccess(context, 'QR payload copied to clipboard!');
                         },
                         icon: const Icon(Icons.copy_rounded, size: 16),
                         label: const Text('COPY PAYLOAD', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
@@ -1011,12 +1138,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                 await db.deleteWorker(worker.workerId);
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Deleted worker: ${worker.name}'),
-                      backgroundColor: AppColors.darkRed,
-                    ),
-                  );
+                  AppSnackBar.showInfo(context, 'Deleted worker: ${worker.name}');
                 }
               },
               child: const Text('DELETE WORKER', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1072,12 +1194,7 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                 await db.deleteLaborGroup(group.id);
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Deleted group "${group.name}"'),
-                      backgroundColor: AppColors.darkRed,
-                    ),
-                  );
+                  AppSnackBar.showInfo(context, 'Deleted group "${group.name}"');
                 }
               },
               child: const Text('DELETE GROUP', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1145,11 +1262,9 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                 await db.paySalary(worker: worker, monthYear: currentMonthYear);
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Paid Rs. ${_formatter.format(worker.monthlySalary.toInt())} to ${worker.name} ($currentMonthYear)'),
-                      backgroundColor: AppColors.darkGreen,
-                    ),
+                  AppSnackBar.showSuccess(
+                    context,
+                    'Paid Rs. ${_formatter.format(worker.monthlySalary.toInt())} to ${worker.name} ($currentMonthYear)',
                   );
                 }
               },
@@ -1715,11 +1830,9 @@ class _TeamLaborScreenState extends ConsumerState<TeamLaborScreen> with SingleTi
                                     groupId: group.id,
                                   );
                                   if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Removed ${member.name} from "${group.name}"'),
-                                        backgroundColor: AppColors.darkRed,
-                                      ),
+                                    AppSnackBar.showInfo(
+                                      context,
+                                      'Removed ${member.name} from "${group.name}"',
                                     );
                                   }
                                 },

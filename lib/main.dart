@@ -7,10 +7,12 @@ import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'services/database_seeder.dart';
+import 'providers/farm_providers.dart';
 import 'screens/splash_screen.dart';
 import 'screens/get_started_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_navigation_shell.dart';
+import 'screens/customer_home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,8 +58,8 @@ class _WimalasooriyaFarmAppState extends ConsumerState<WimalasooriyaFarmApp> {
     final firebaseAuthUser = FirebaseAuth.instance.currentUser;
     final hasSeenOnboarding = prefs.getBool('has_seen_get_started') ?? false;
 
-    // Check if user is logged in
-    final loggedIn = savedAuth ?? (firebaseAuthUser != null);
+    // Check if user is logged in (both persisted flag and active Firebase Auth session required)
+    final loggedIn = (savedAuth == true) && (firebaseAuthUser != null);
 
     // Maintain brief splash screen duration to present official brand crest and establish listeners
     await Future.delayed(const Duration(milliseconds: 1800));
@@ -89,6 +91,8 @@ class _WimalasooriyaFarmAppState extends ConsumerState<WimalasooriyaFarmApp> {
     } catch (e) {
       debugPrint('Logout notice: $e');
     }
+    ref.invalidate(authUserProvider);
+    ref.invalidate(currentUserStreamProvider);
     if (mounted) {
       setState(() {
         _isLoggedIn = false;
@@ -104,9 +108,25 @@ class _WimalasooriyaFarmAppState extends ConsumerState<WimalasooriyaFarmApp> {
     if (_isInitializing) {
       homeWidget = const SplashScreen();
     } else if (_isLoggedIn) {
-      // Direct routing guard: Bypasses Get Started and Login screens entirely
-      homeWidget = MainNavigationShell(
-        onLogout: _onLogout,
+      // Role-Based Routing Guard
+      final userAsync = ref.watch(currentUserStreamProvider);
+      homeWidget = userAsync.when(
+        data: (user) {
+          if (user.role.toLowerCase().contains('customer')) {
+            return CustomerHomeScreen(
+              onLogout: _onLogout,
+            );
+          }
+          return MainNavigationShell(
+            onLogout: _onLogout,
+          );
+        },
+        loading: () => const SplashScreen(),
+        error: (err, stack) {
+          return MainNavigationShell(
+            onLogout: _onLogout,
+          );
+        },
       );
     } else if (!_hasSeenGetStarted) {
       // First-time intro page

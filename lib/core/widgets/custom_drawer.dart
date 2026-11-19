@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../constants/app_assets.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_provider.dart';
 import '../../providers/farm_providers.dart';
 import '../../screens/user_profile_screen.dart';
 import '../../screens/admin_panel_screen.dart';
+import '../../utils/app_snackbar.dart';
 
 class CustomNavigationDrawer extends ConsumerWidget {
   final VoidCallback? onOpenTeamLabor;
+  final VoidCallback? onOpenShops;
   final VoidCallback? onOpenBulkOrders;
   final VoidCallback? onOpenFleet;
   final VoidCallback? onLogout;
@@ -16,6 +19,7 @@ class CustomNavigationDrawer extends ConsumerWidget {
   const CustomNavigationDrawer({
     super.key,
     this.onOpenTeamLabor,
+    this.onOpenShops,
     this.onOpenBulkOrders,
     this.onOpenFleet,
     this.onLogout,
@@ -27,8 +31,12 @@ class CustomNavigationDrawer extends ConsumerWidget {
     final userAsync = ref.watch(currentUserStreamProvider);
     final isDark = themeMode == ThemeMode.dark;
 
-    final userName = userAsync.value?.name ?? 'Deshan Wimalasooriya';
-    final userRole = userAsync.value?.role ?? 'Admin / Manager';
+    final userName = (userAsync.value?.name.isNotEmpty == true)
+        ? userAsync.value!.name
+        : (FirebaseAuth.instance.currentUser?.displayName ?? 'Farm Staff');
+    final userRole = (userAsync.value?.role.isNotEmpty == true)
+        ? userAsync.value!.role
+        : 'Operations';
 
     return Drawer(
       backgroundColor: isDark ? const Color(0xFF0B1B3D) : Colors.white,
@@ -147,6 +155,14 @@ class CustomNavigationDrawer extends ConsumerWidget {
                     },
                   ),
                   _DrawerTile(
+                    icon: Icons.storefront_rounded,
+                    label: 'Shops',
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (onOpenShops != null) onOpenShops!();
+                    },
+                  ),
+                  _DrawerTile(
                     icon: Icons.shopping_cart_outlined,
                     label: 'Bulk Orders (B2B)',
                     onTap: () {
@@ -167,8 +183,9 @@ class CustomNavigationDrawer extends ConsumerWidget {
                     label: 'Internal Support Chat',
                     onTap: () {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Support Chat: Connected to Farm Fleet & Dispatch')),
+                      AppSnackBar.showInfo(
+                        context,
+                        'Support Chat: Connected to Farm Fleet & Dispatch',
                       );
                     },
                   ),
@@ -177,8 +194,9 @@ class CustomNavigationDrawer extends ConsumerWidget {
                     label: 'Activity Log',
                     onTap: () {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Activity Log: Real-time Firestore server timestamps active')),
+                      AppSnackBar.showInfo(
+                        context,
+                        'Activity Log: Real-time Firestore server timestamps active',
                       );
                     },
                   ),

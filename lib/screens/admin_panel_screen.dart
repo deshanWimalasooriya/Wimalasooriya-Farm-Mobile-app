@@ -4,6 +4,7 @@ import '../core/constants/app_assets.dart';
 import '../core/theme/app_colors.dart';
 import '../models/farm_models.dart';
 import '../providers/farm_providers.dart';
+import '../utils/app_snackbar.dart';
 
 class AdminPanelScreen extends ConsumerStatefulWidget {
   const AdminPanelScreen({super.key});
@@ -108,18 +109,11 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
       await db.saveFarmSettings(newSettings);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Farm settings updated successfully!'),
-            backgroundColor: AppColors.darkGreen,
-          ),
-        );
+        AppSnackBar.showSuccess(context, 'Farm settings updated successfully!');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving settings: $e'), backgroundColor: AppColors.darkRed),
-        );
+        AppSnackBar.showError(context, 'Error saving settings: $e');
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -169,12 +163,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
                   await db.addNewTask(text);
                   if (ctx.mounted) Navigator.pop(ctx);
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Added task: "$text"'),
-                        backgroundColor: AppColors.darkGreen,
-                      ),
-                    );
+                    AppSnackBar.showSuccess(context, 'Added task: "$text"');
                   }
                 }
               },
@@ -224,12 +213,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
       final db = ref.read(databaseServiceProvider);
       await db.deleteTask(task.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Deleted task: "${task.title}"'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
+        AppSnackBar.showInfo(context, 'Deleted task: "${task.title}"');
       }
     }
   }
@@ -275,18 +259,11 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
       final db = ref.read(databaseServiceProvider);
       await db.clearAllDailyTasks();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('All daily operational tasks cleared successfully.'),
-            backgroundColor: AppColors.darkGreen,
-          ),
-        );
+        AppSnackBar.showSuccess(context, 'All daily operational tasks cleared successfully.');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error clearing tasks: $e'), backgroundColor: AppColors.darkRed),
-        );
+        AppSnackBar.showError(context, 'Error clearing tasks: $e');
       }
     } finally {
       if (mounted) setState(() => _isClearingTasks = false);
@@ -381,18 +358,11 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
       final db = ref.read(databaseServiceProvider);
       await db.factoryResetDatabase();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Database factory reset completed. Operational records cleared.'),
-            backgroundColor: AppColors.darkGreen,
-          ),
-        );
+        AppSnackBar.showSuccess(context, 'Database factory reset completed. Operational records cleared.');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error resetting database: $e'), backgroundColor: AppColors.darkRed),
-        );
+        AppSnackBar.showError(context, 'Error resetting database: $e');
       }
     } finally {
       if (mounted) setState(() => _isResetting = false);

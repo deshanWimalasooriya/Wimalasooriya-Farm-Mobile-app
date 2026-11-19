@@ -7,6 +7,7 @@ import '../core/constants/app_assets.dart';
 import '../core/theme/app_colors.dart';
 import '../models/farm_models.dart';
 import '../providers/farm_providers.dart';
+import '../utils/app_snackbar.dart';
 
 class DashboardScreen extends ConsumerWidget {
   final VoidCallback onOpenNotifications;
@@ -52,11 +53,9 @@ class DashboardScreen extends ConsumerWidget {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Exported $currentRange analytics to CSV/PDF successfully!'),
-                        backgroundColor: AppColors.darkGreen,
-                      ),
+                    AppSnackBar.showSuccess(
+                      context,
+                      'Exported $currentRange analytics to CSV/PDF successfully!',
                     );
                   },
                   icon: const Icon(Icons.download_rounded),
@@ -84,6 +83,8 @@ class DashboardScreen extends ConsumerWidget {
     final henCount = metricsAsync.value?.currentHenCount ?? 0;
     final allEggLogs = eggLogsAsync.value ?? [];
     final allTransactions = transactionsAsync.value ?? [];
+    final notifsAsync = ref.watch(adminNotificationsStreamProvider);
+    final unreadNotifsCount = notifsAsync.value?.where((n) => !n.isRead).length ?? 0;
 
     // Filter data based on selected timeRange (Daily, Weekly, Monthly, Yearly)
     final now = DateTime.now();
@@ -177,18 +178,19 @@ class DashboardScreen extends ConsumerWidget {
                   icon: const Icon(Icons.notifications_rounded, size: 28),
                   onPressed: onOpenNotifications,
                 ),
-                Positioned(
-                  right: 10,
-                  top: 10,
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEF4444),
-                      shape: BoxShape.circle,
+                if (unreadNotifsCount > 0)
+                  Positioned(
+                    right: 10,
+                    top: 10,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEF4444),
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

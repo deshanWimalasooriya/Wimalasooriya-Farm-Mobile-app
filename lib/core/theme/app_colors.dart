@@ -24,6 +24,7 @@ class AppColors {
   static const Color lightCardSurface = Color(0xFFFFFFFF);
   static const Color lightCardBorder = Color(0xFFE2E8F0);
   static const Color lightPrimaryNavy = Color(0xFF0B1B3D);
+  static const Color lightNavy = Color(0xFF0B1B3D);
   static const Color lightAccentGold = Color(0xFFC59B27);
   static const Color lightTextPrimary = Color(0xFF0B1B3D);
   static const Color lightTextSecondary = Color(0xFF475569);

@@ -1,4 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
+import 'auth_service.dart';
 import '../models/farm_models.dart';
 
 class DatabaseService {
@@ -19,22 +23,47 @@ class DatabaseService {
   CollectionReference get vehiclesCollection => _firestore.collection('vehicles');
   CollectionReference get vehicleGroupsCollection => _firestore.collection('vehicle_groups');
   CollectionReference get farmSettingsCollection => _firestore.collection('farm_settings');
+  CollectionReference get ordersCollection => _firestore.collection('orders');
+  CollectionReference get notificationsCollection => _firestore.collection('notifications');
 
   // ==================== USER PROFILE ====================
   Stream<AppUser> streamCurrentUser([String? uid]) {
-    final targetDocId = uid ?? 'current_user';
-    return usersCollection.doc(targetDocId).snapshots().map((doc) {
+    final activeUid = uid ?? FirebaseAuth.instance.currentUser?.uid;
+    if (activeUid == null || activeUid.isEmpty) {
+      return Stream.value(
+        AppUser(
+          uid: 'unauthenticated',
+          name: 'Guest User',
+          email: '',
+          role: 'Customer',
+        ),
+      );
+    }
+
+    return usersCollection.doc(activeUid).snapshots().map((doc) {
       if (doc.exists && doc.data() != null) {
         return AppUser.fromMap(doc.data() as Map<String, dynamic>, doc.id);
       }
+
+      final authUser = FirebaseAuth.instance.currentUser;
+      if (authUser != null && authUser.email == 'deshanwimalasooriya000@gmail.com') {
+        return AppUser(
+          uid: activeUid,
+          name: 'Deshan Wimalasooriya',
+          email: 'deshanwimalasooriya000@gmail.com',
+          role: 'Admin / Manager',
+          phone: '+94 77 123 4567',
+          nic: '199214502341',
+          farmBranch: 'Main Farm — Kurunegala',
+        );
+      }
+
       return AppUser(
-        uid: targetDocId,
-        name: 'Deshan Wimalasooriya',
-        email: 'deshanwimalasooriya000@gmail.com',
-        role: 'Admin / Manager',
-        phone: '+94 77 123 4567',
-        nic: '199214502341',
-        farmBranch: 'Main Farm — Kurunegala',
+        uid: activeUid,
+        name: authUser?.displayName ?? (authUser?.email != null ? authUser!.email!.split('@').first : 'Customer'),
+        email: authUser?.email ?? '',
+        role: 'Customer',
+        phone: authUser?.phoneNumber ?? '',
       );
     });
   }
@@ -71,7 +100,6 @@ class DatabaseService {
 
   Future<void> updateUserProfile(AppUser user) async {
     await usersCollection.doc(user.uid).set(user.toMap(), SetOptions(merge: true));
-    await usersCollection.doc('current_user').set(user.toMap(), SetOptions(merge: true));
   }
 
   // ==================== FARM METRICS ====================
@@ -436,6 +464,37 @@ class DatabaseService {
     await workersCollection.doc(worker.workerId).set(worker.toMap());
   }
 
+  // Safe Employee Account Creation via Secondary Firebase App
+  Future<Map<String, String>> createEmployeeWithAuth({
+    required String name,
+    required String email,
+    required String role,
+    required String phone,
+    required String nic,
+    int age = 28,
+    required double monthlySalary,
+    String? groupId,
+    String? groupName,
+    String? qrPayload,
+    String? workerId,
+    String? initialPassword,
+  }) async {
+    return AuthService().createEmployeeWithAuth(
+      name: name,
+      email: email,
+      role: role,
+      phone: phone,
+      nic: nic,
+      age: age,
+      monthlySalary: monthlySalary,
+      groupId: groupId,
+      groupName: groupName,
+      qrPayload: qrPayload,
+      workerId: workerId,
+      initialPassword: initialPassword,
+    );
+  }
+
   Future<void> deleteWorker(String workerId) async {
     final batch = _firestore.batch();
     batch.delete(workersCollection.doc(workerId));
@@ -780,6 +839,8 @@ class DatabaseService {
       bulkOrdersCollection,
       vehiclesCollection,
       vehicleGroupsCollection,
+      ordersCollection,
+      notificationsCollection,
     ];
 
     for (final col in collectionsToClear) {
@@ -803,5 +864,350 @@ class DatabaseService {
       'unitEggPrice': 40.0,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  // ==================== CUSTOMER & LOGISTICS ORDERS ====================
+  Future<void> placeCustomerOrder(CustomerOrder order) async {
+    final docRef = ordersCollection.doc(order.orderId.isNotEmpty ? order.orderId : null);
+    final finalOrderId = docRef.id;
+    final orderToSave = order.orderId.isEmpty ? order.copyWith(orderId: finalOrderId) : order;
+    await docRef.set(orderToSave.toMap());
+
+    // Task 4: Write real notification for Admin
+    try {
+      final senderTitle = orderToSave.shopName.isNotEmpty ? orderToSave.shopName : orderToSave.customerName;
+      await notificationsCollection.add({
+        'recipientId': 'admin',
+        'title': 'New Bulk Order Received',
+        'message': '$senderTitle placed an order for ${orderToSave.quantity} eggs.',
+        'orderId': finalOrderId,
+        'type': 'order_placed',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Notice: Error creating admin notification: $e');
+    }
+  }
+
+  Stream<List<CustomerOrder>> streamCustomerOrders(String customerId) {
+    return ordersCollection
+        .where('customerId', isEqualTo: customerId)
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs.map((doc) {
+        return CustomerOrder.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+      }).toList();
+      list.sort((a, b) {
+        final aTime = a.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bTime = b.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bTime.compareTo(aTime);
+      });
+      return list;
+    });
+  }
+
+  Stream<List<CustomerOrder>> streamAllOrders() {
+    return ordersCollection.snapshots().map((snapshot) {
+      final list = snapshot.docs.map((doc) {
+        return CustomerOrder.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+      }).toList();
+      list.sort((a, b) {
+        final aTime = a.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bTime = b.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bTime.compareTo(aTime);
+      });
+      return list;
+    });
+  }
+
+  Future<void> updateCustomerOrderStatus(String orderId, String newStatus) async {
+    await ordersCollection.doc(orderId).update({
+      'status': newStatus,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> acceptCustomerOrder(CustomerOrder order) async {
+    await ordersCollection.doc(order.orderId).set({
+      'status': 'Accepted',
+      'acceptedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // Task 3: Write notification to customer
+    try {
+      final shortId = order.orderId.length > 8 ? order.orderId.substring(0, 8) : order.orderId;
+      await notificationsCollection.add({
+        'recipientId': order.customerId,
+        'title': 'Order Accepted!',
+        'message': 'Your order #$shortId for ${order.quantity} eggs has been accepted by Wimalasooriya Farms.',
+        'orderId': order.orderId,
+        'type': 'order_accepted',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Notice: Error creating customer acceptance notification: $e');
+    }
+  }
+
+  Future<void> rejectCustomerOrder(CustomerOrder order, [String? reason]) async {
+    await ordersCollection.doc(order.orderId).set({
+      'status': 'Rejected',
+      'rejectedAt': FieldValue.serverTimestamp(),
+      if (reason != null && reason.isNotEmpty) 'rejectionReason': reason,
+    }, SetOptions(merge: true));
+
+    try {
+      final shortId = order.orderId.length > 8 ? order.orderId.substring(0, 8) : order.orderId;
+      await notificationsCollection.add({
+        'recipientId': order.customerId,
+        'title': 'Order Update',
+        'message': 'Your order #$shortId could not be fulfilled at this time${reason != null && reason.isNotEmpty ? ": $reason" : "."}',
+        'orderId': order.orderId,
+        'type': 'order_rejected',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Notice: Error creating customer rejection notification: $e');
+    }
+  }
+
+  Future<void> dispatchCustomerOrder(CustomerOrder order) async {
+    await ordersCollection.doc(order.orderId).set({
+      'status': 'Dispatched',
+      'dispatchedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    try {
+      final shortId = order.orderId.length > 8 ? order.orderId.substring(0, 8) : order.orderId;
+      await notificationsCollection.add({
+        'recipientId': order.customerId,
+        'title': 'Order Dispatched!',
+        'message': 'Your order #$shortId for ${order.quantity} eggs has been dispatched and is on the way.',
+        'orderId': order.orderId,
+        'type': 'order_dispatched',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Notice: Error creating customer dispatch notification: $e');
+    }
+  }
+
+  Future<void> deliverCustomerOrder(CustomerOrder order) async {
+    await ordersCollection.doc(order.orderId).set({
+      'status': 'Delivered',
+      'deliveredAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    try {
+      final shortId = order.orderId.length > 8 ? order.orderId.substring(0, 8) : order.orderId;
+      await notificationsCollection.add({
+        'recipientId': order.customerId,
+        'title': 'Order Delivered!',
+        'message': 'Your order #$shortId for ${order.quantity} eggs has been delivered successfully.',
+        'orderId': order.orderId,
+        'type': 'order_delivered',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Notice: Error creating customer delivery notification: $e');
+    }
+  }
+
+  Future<String> remakeCustomerOrder({
+    required CustomerOrder previousOrder,
+    required double currentUnitPrice,
+  }) async {
+    final docRef = ordersCollection.doc();
+    final newOrderId = docRef.id;
+    final total = previousOrder.quantity * currentUnitPrice;
+
+    final newOrder = CustomerOrder(
+      orderId: newOrderId,
+      customerId: previousOrder.customerId,
+      customerName: previousOrder.customerName,
+      customerPhone: previousOrder.customerPhone,
+      shopName: previousOrder.shopName,
+      shopAddress: previousOrder.shopAddress,
+      latitude: previousOrder.latitude,
+      longitude: previousOrder.longitude,
+      quantity: previousOrder.quantity,
+      unitPrice: currentUnitPrice,
+      totalPrice: total,
+      status: 'Pending',
+      timestamp: DateTime.now(),
+    );
+
+    await docRef.set(newOrder.toMap());
+
+    try {
+      final senderTitle = newOrder.shopName.isNotEmpty ? newOrder.shopName : newOrder.customerName;
+      await notificationsCollection.add({
+        'recipientId': 'admin',
+        'title': 'Re-Order Received',
+        'message': '$senderTitle re-ordered ${newOrder.quantity} eggs.',
+        'orderId': newOrderId,
+        'type': 'order_placed',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Notice: Error creating admin notification for re-order: $e');
+    }
+
+    return newOrderId;
+  }
+
+  Future<void> cancelCustomerOrder(String orderId) async {
+    await updateCustomerOrderStatus(orderId, 'Cancelled');
+  }
+
+  Future<void> updateUserShopLocation({
+    required String uid,
+    required String shopName,
+    required String shopAddress,
+    required double latitude,
+    required double longitude,
+  }) async {
+    await usersCollection.doc(uid).set({
+      'shopName': shopName.trim(),
+      'shopAddress': shopAddress.trim(),
+      'latitude': latitude,
+      'longitude': longitude,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  // ==================== REGISTERED SHOPS ====================
+  Stream<List<AppUser>> streamCustomerShops() {
+    return usersCollection
+        .where('role', isEqualTo: 'Customer')
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs.map((doc) {
+        return AppUser.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+      }).toList();
+      list.sort((a, b) => a.shopNameOrName.toLowerCase().compareTo(b.shopNameOrName.toLowerCase()));
+      return list;
+    });
+  }
+
+  // ==================== NOTIFICATIONS ====================
+  Stream<List<FarmNotification>> streamAdminNotifications() {
+    return notificationsCollection
+        .where('recipientId', isEqualTo: 'admin')
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs.map((doc) {
+        return FarmNotification.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+      }).toList();
+      list.sort((a, b) {
+        final aTime = a.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bTime = b.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bTime.compareTo(aTime);
+      });
+      return list;
+    });
+  }
+
+  Stream<List<FarmNotification>> streamCustomerNotifications(String customerId) {
+    if (customerId.isEmpty) return Stream.value([]);
+    return notificationsCollection
+        .where('recipientId', isEqualTo: customerId)
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs.map((doc) {
+        return FarmNotification.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+      }).toList();
+      list.sort((a, b) {
+        final aTime = a.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bTime = b.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bTime.compareTo(aTime);
+      });
+      return list;
+    });
+  }
+
+  Future<void> markNotificationAsRead(String notificationId) async {
+    await notificationsCollection.doc(notificationId).set({
+      'isRead': true,
+      'readAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> markAllNotificationsAsRead(String recipientId) async {
+    final snapshot = await notificationsCollection
+        .where('recipientId', isEqualTo: recipientId)
+        .where('isRead', isEqualTo: false)
+        .get();
+    final batch = _firestore.batch();
+    for (final doc in snapshot.docs) {
+      batch.update(doc.reference, {'isRead': true, 'readAt': FieldValue.serverTimestamp()});
+    }
+    await batch.commit();
+  }
+
+  // ==================== FOOD & MEDS CATALOG ====================
+  Stream<Map<String, List<CatalogItem>>> streamCatalogs() {
+    return farmSettingsCollection.doc('catalogs').snapshots().map((doc) {
+      final defaultFeeds = [
+        CatalogItem(name: 'Layer Mash - High Calcium', description: 'Optimal nutrition for egg-laying hens'),
+        CatalogItem(name: 'Grower Mash', description: 'Balanced growth feed for pullets'),
+        CatalogItem(name: 'Chick Starter', description: 'High protein starter crumbs for chicks'),
+        CatalogItem(name: 'Broiler Finisher', description: 'Energy dense feed for mature flock'),
+      ];
+      final defaultMeds = [
+        CatalogItem(name: 'Multivitamin ADE', description: 'Stress-relief and immunity booster'),
+        CatalogItem(name: 'Electrolytes Soluble Powder', description: 'Hydration and heat stress prevention'),
+        CatalogItem(name: 'Newcastle Vaccine (LaSota)', description: 'ND viral protection via drinking water'),
+        CatalogItem(name: 'Gumboro (IBD) Vaccine', description: 'Infectious bursal disease protection'),
+        CatalogItem(name: 'Antibiotic Oxytetracycline', description: 'Broad-spectrum bacterial treatment'),
+      ];
+
+      if (!doc.exists || doc.data() == null) {
+        return {
+          'feed': defaultFeeds,
+          'medicine': defaultMeds,
+        };
+      }
+
+      final data = doc.data() as Map<String, dynamic>;
+      final rawFeeds = data['feedItems'] as List<dynamic>? ?? [];
+      final rawMeds = data['medicineItems'] as List<dynamic>? ?? [];
+
+      final feedList = rawFeeds.map((e) => CatalogItem.fromMap(Map<String, dynamic>.from(e as Map))).toList();
+      final medList = rawMeds.map((e) => CatalogItem.fromMap(Map<String, dynamic>.from(e as Map))).toList();
+
+      return {
+        'feed': feedList.isNotEmpty ? feedList : defaultFeeds,
+        'medicine': medList.isNotEmpty ? medList : defaultMeds,
+      };
+    });
+  }
+
+  Future<void> addCatalogItem({
+    required String type, // 'feed' | 'medicine'
+    required String name,
+    required String description,
+  }) async {
+    final docRef = farmSettingsCollection.doc('catalogs');
+    final doc = await docRef.get();
+    final key = type.toLowerCase() == 'feed' ? 'feedItems' : 'medicineItems';
+
+    final newItem = {'name': name.trim(), 'description': description.trim()};
+
+    if (!doc.exists) {
+      await docRef.set({
+        key: [newItem],
+      }, SetOptions(merge: true));
+    } else {
+      await docRef.update({
+        key: FieldValue.arrayUnion([newItem]),
+      });
+    }
   }
 }

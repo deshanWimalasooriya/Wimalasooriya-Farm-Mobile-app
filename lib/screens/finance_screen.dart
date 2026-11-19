@@ -6,6 +6,7 @@ import '../core/constants/app_assets.dart';
 import '../core/theme/app_colors.dart';
 import '../models/farm_models.dart';
 import '../providers/farm_providers.dart';
+import '../utils/app_snackbar.dart';
 
 class FinanceScreen extends ConsumerStatefulWidget {
   final VoidCallback onOpenNotifications;
@@ -42,6 +43,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
 
   // 4. Food & Meds Sub-Tab State
   String _foodMedType = 'Feed'; // 'Feed' or 'Medicine'
+  String? _selectedCatalogItem;
   final TextEditingController _foodMedNameController = TextEditingController();
   final TextEditingController _foodMedQtyController = TextEditingController(text: '1');
   final TextEditingController _foodMedCostController = TextEditingController();
@@ -81,7 +83,14 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
             children: [
               Icon(Icons.edit_note_rounded, color: AppColors.darkPrimaryGold),
               SizedBox(width: 10),
-              Text('Edit Unit Egg Price', style: TextStyle(color: Colors.white, fontSize: 18)),
+              Expanded(
+                child: Text(
+                  'Edit Unit Egg Price',
+                  style: TextStyle(color: Colors.white, fontSize: 18),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
             ],
           ),
           content: TextField(
@@ -105,13 +114,13 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                 if (newPrice > 0) {
                   final db = ref.read(databaseServiceProvider);
                   await db.updateUnitEggPrice(newPrice);
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Updated Unit Egg Price to Rs. ${newPrice.toStringAsFixed(2)}'),
-                      backgroundColor: AppColors.darkGreen,
-                    ),
-                  );
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (context.mounted) {
+                    AppSnackBar.showSuccess(
+                      context,
+                      'Updated Unit Egg Price to Rs. ${newPrice.toStringAsFixed(2)}',
+                    );
+                  }
                 }
               },
               child: const Text('UPDATE PRICE'),
@@ -188,7 +197,14 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           children: [
             Icon(Icons.account_balance_wallet_outlined, color: Color(0xFFEF4444)),
             SizedBox(width: 10),
-            Text('Insufficient Funds', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text(
+                'Insufficient Funds',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
           ],
         ),
         content: Text(
@@ -219,34 +235,12 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final metrics = ref.read(farmMetricsStreamProvider).value;
     final availableEggs = metrics?.todayEggCount ?? 0;
     if (_soldEggs > availableEggs) {
-      await showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF16264C),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Row(
-            children: [
-              Icon(Icons.inventory_2_outlined, color: Color(0xFFEF4444)),
-              SizedBox(width: 10),
-              Text('Insufficient Egg Inventory', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Text(
-            'Cannot sell $_soldEggs eggs. Available stock is only $availableEggs eggs.',
-            style: const TextStyle(color: Colors.white70),
-          ),
-          actions: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.darkPrimaryGold,
-                foregroundColor: const Color(0xFF0B1B3D),
-              ),
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      );
+      if (mounted) {
+        AppSnackBar.showError(
+          context,
+          'Cannot sell $_soldEggs eggs. Available stock is only $availableEggs eggs.',
+        );
+      }
       return;
     }
 
@@ -267,18 +261,14 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         loggedBy: 'Deshan Wimalasooriya',
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Recorded Egg Sale: $_soldEggs eggs (+Rs. ${NumberFormat('#,###.00').format(total)})'),
-            backgroundColor: AppColors.darkGreen,
-          ),
+        AppSnackBar.showSuccess(
+          context,
+          'Recorded Egg Sale: $_soldEggs eggs (+Rs. ${NumberFormat('#,###.00').format(total)})',
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Notice: $e'), backgroundColor: AppColors.darkRed),
-        );
+        AppSnackBar.showError(context, 'Notice: $e');
       }
     }
   }
@@ -301,7 +291,14 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                 children: [
                   Icon(Icons.lock_outline_rounded, color: AppColors.darkPrimaryGold),
                   SizedBox(width: 10),
-                  Text('Admin Authentication', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Expanded(
+                    child: Text(
+                      'Admin Authentication',
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
                 ],
               ),
               content: Column(
@@ -396,9 +393,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
 
   Future<void> _recordSalaryPayment() async {
     if (_selectedWorker == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a worker first'), backgroundColor: AppColors.darkRed),
-      );
+      AppSnackBar.showError(context, 'Please select a worker first');
       return;
     }
     final amount = double.tryParse(_salaryAmountController.text) ?? _selectedWorker!.monthlySalary;
@@ -424,11 +419,9 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final authorized = await _promptAdminPasswordConfirmation(context);
     if (!authorized) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Salary payment cancelled: Admin authentication required.'),
-            backgroundColor: AppColors.darkRed,
-          ),
+        AppSnackBar.showError(
+          context,
+          'Salary payment cancelled: Admin authentication required.',
         );
       }
       return;
@@ -447,11 +440,9 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     setState(() => _selectedWorker = null);
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Salary payment authorized and recorded for ${_selectedWorker?.name ?? "worker"}'),
-          backgroundColor: AppColors.darkGreen,
-        ),
+      AppSnackBar.showSuccess(
+        context,
+        'Salary payment authorized and recorded for ${_selectedWorker?.name ?? "worker"}',
       );
     }
   }
@@ -459,9 +450,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
   Future<void> _recordMaintenance() async {
     final cost = double.tryParse(_maintCostController.text) ?? 0.0;
     if (cost <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid expense cost'), backgroundColor: AppColors.darkRed),
-      );
+      AppSnackBar.showError(context, 'Please enter a valid expense cost');
       return;
     }
 
@@ -473,17 +462,13 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
 
     final isVehicle = _maintenanceMode == 'Vehicle Maintenance';
     if (isVehicle && _selectedMaintVehicle == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a vehicle for vehicle maintenance'), backgroundColor: AppColors.darkRed),
-      );
+      AppSnackBar.showError(context, 'Please select a vehicle for vehicle maintenance');
       return;
     }
 
     final customDesc = _maintTitleController.text.trim();
     if (!isVehicle && customDesc.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter maintenance title or equipment name'), backgroundColor: AppColors.darkRed),
-      );
+      AppSnackBar.showError(context, 'Please enter maintenance title or equipment name');
       return;
     }
 
@@ -544,13 +529,88 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     });
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(isVehicle ? 'Vehicle maintenance expense recorded and synced!' : 'Factory maintenance expense recorded and synced!'),
-          backgroundColor: AppColors.darkGreen,
-        ),
+      AppSnackBar.showSuccess(
+        context,
+        isVehicle ? 'Vehicle maintenance expense recorded and synced!' : 'Factory maintenance expense recorded and synced!',
       );
     }
+  }
+
+  Future<void> _showAddCatalogItemDialog() async {
+    final nameCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppColors.darkCardSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Add New $_foodMedType to Catalog', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: InputDecoration(
+                labelText: 'Item Name',
+                hintText: 'e.g. High Calcium Layer Mash',
+                filled: true,
+                fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descCtrl,
+              decoration: InputDecoration(
+                labelText: 'Description (Optional)',
+                hintText: 'e.g. Daily maintenance feed',
+                filled: true,
+                fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              if (name.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                await ref.read(databaseServiceProvider).addCatalogItem(
+                  type: _foodMedType.toLowerCase(),
+                  name: name,
+                  description: descCtrl.text.trim(),
+                );
+                setState(() {
+                  _selectedCatalogItem = name;
+                  _foodMedNameController.text = name;
+                });
+                if (mounted) {
+                  AppSnackBar.showSuccess(context, 'Added "$name" to $_foodMedType catalog!');
+                }
+              } catch (e) {
+                if (mounted) {
+                  AppSnackBar.showError(context, 'Failed to add item: $e');
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.darkPrimaryGold,
+              foregroundColor: const Color(0xFF0B1B3D),
+            ),
+            child: const Text('Save to Catalog', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _recordFoodMed() async {
@@ -582,14 +642,15 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       description: '$name ($qty units)',
     );
 
+    setState(() {
+      _selectedCatalogItem = null;
+    });
     _foodMedNameController.clear();
     _foodMedCostController.clear();
     _foodMedQtyController.text = '1';
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$_foodMedType purchase recorded!'), backgroundColor: AppColors.darkGreen),
-      );
+      AppSnackBar.showSuccess(context, '$_foodMedType purchase recorded!');
     }
   }
 
@@ -603,7 +664,10 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final formatter = NumberFormat('#,###');
 
     final unitPrice = metricsAsync.value?.unitEggPrice ?? 40.0;
+    final availableEggs = metricsAsync.value?.todayEggCount ?? 0;
     final calculatedIncome = _soldEggs * unitPrice;
+    final notifsAsync = ref.watch(adminNotificationsStreamProvider);
+    final unreadNotifsCount = notifsAsync.value?.where((n) => !n.isRead).length ?? 0;
 
     // Filter transactions by selected sub-tab category
     final activeCategory = _subTabs[_selectedSubTab];
@@ -654,18 +718,19 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                   icon: const Icon(Icons.notifications_rounded, size: 28),
                   onPressed: widget.onOpenNotifications,
                 ),
-                Positioned(
-                  right: 10,
-                  top: 10,
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEF4444),
-                      shape: BoxShape.circle,
+                if (unreadNotifsCount > 0)
+                  Positioned(
+                    right: 10,
+                    top: 10,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEF4444),
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -735,7 +800,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
             // DEDICATED FORM BASED ON SELECTED SUB-TAB
             if (_selectedSubTab == 0) ...[
               // 1. EGGS FORM (1-by-1 stepper, editable unit price, live calculation)
-              _buildEggSalesCard(calculatedIncome, unitPrice, formatter, isDark),
+              _buildEggSalesCard(calculatedIncome, unitPrice, availableEggs, formatter, isDark),
             ] else if (_selectedSubTab == 1) ...[
               // 2. SALARY PAYMENTS FORM
               _buildSalaryPaymentCard(workersAsync, formatter, isDark),
@@ -762,7 +827,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
 
   // ==================== SUB-TAB FORMS ====================
 
-  Widget _buildEggSalesCard(double calculatedIncome, double unitPrice, NumberFormat formatter, bool isDark) {
+  Widget _buildEggSalesCard(double calculatedIncome, double unitPrice, int availableEggs, NumberFormat formatter, bool isDark) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -776,12 +841,93 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Live Available Egg Stock Banner
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: availableEggs > 0 ? AppColors.darkPrimaryGold.withOpacity(0.5) : const Color(0xFFEF4444),
+                width: 1.2,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: (availableEggs > 0 ? AppColors.darkPrimaryGold : const Color(0xFFEF4444)).withOpacity(0.18),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.egg_outlined,
+                    color: availableEggs > 0 ? AppColors.darkPrimaryGold : const Color(0xFFEF4444),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Total Available Egg Stock',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${formatter.format(availableEggs)} Eggs',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: availableEggs > 0
+                              ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                              : const Color(0xFFEF4444),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (availableEggs > 0 ? const Color(0xFF22C55E) : const Color(0xFFEF4444)).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: availableEggs > 0 ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Text(
+                    availableEggs > 0 ? 'In Stock' : 'Out of Stock',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: availableEggs > 0 ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'EGG SALES',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+              const Expanded(
+                child: Text(
+                  'EGG SALES',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
 
               // Editable Unit Egg Price Badge
@@ -1319,6 +1465,11 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
   }
 
   Widget _buildFoodMedsCard(bool isDark) {
+    final catalogsAsync = ref.watch(catalogsStreamProvider);
+    final catalogMap = catalogsAsync.value ?? {};
+    final catalogItems = catalogMap[_foodMedType.toLowerCase()] ?? [];
+    final catalogNames = catalogItems.map((c) => c.name).toSet();
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -1337,7 +1488,13 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
             children: [
               Expanded(
                 child: GestureDetector(
-                  onTap: () => setState(() => _foodMedType = 'Feed'),
+                  onTap: () {
+                    setState(() {
+                      _foodMedType = 'Feed';
+                      _selectedCatalogItem = null;
+                      _foodMedNameController.clear();
+                    });
+                  },
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     decoration: BoxDecoration(
@@ -1360,7 +1517,13 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: GestureDetector(
-                  onTap: () => setState(() => _foodMedType = 'Medicine'),
+                  onTap: () {
+                    setState(() {
+                      _foodMedType = 'Medicine';
+                      _selectedCatalogItem = null;
+                      _foodMedNameController.clear();
+                    });
+                  },
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     decoration: BoxDecoration(
@@ -1382,10 +1545,107 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
 
+          // Catalog Selector Header Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'SELECT FROM CATALOG',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                  color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                ),
+              ),
+              InkWell(
+                onTap: _showAddCatalogItemDialog,
+                borderRadius: BorderRadius.circular(6),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    children: [
+                      Icon(Icons.add_circle_outline_rounded, size: 14, color: AppColors.darkPrimaryGold),
+                      SizedBox(width: 4),
+                      Text(
+                        '+ Add New Item',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.darkPrimaryGold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Dropdown for Catalog Items
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0B1B3D) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isDark ? AppColors.darkCardBorder : AppColors.lightCardBorder),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                value: catalogNames.contains(_selectedCatalogItem) ? _selectedCatalogItem : null,
+                hint: Text(
+                  'Choose $_foodMedType from catalog...',
+                  style: TextStyle(color: isDark ? Colors.white54 : Colors.black45, fontSize: 13),
+                ),
+                dropdownColor: isDark ? const Color(0xFF0B1B3D) : Colors.white,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.darkPrimaryGold),
+                items: [
+                  ...catalogItems.map((item) {
+                    return DropdownMenuItem<String>(
+                      value: item.name,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            item.name,
+                            style: TextStyle(
+                              color: isDark ? Colors.white : Colors.black87,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          if (item.description.isNotEmpty)
+                            Text(
+                              item.description,
+                              style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 10),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      _selectedCatalogItem = val;
+                      _foodMedNameController.text = val;
+                    });
+                  }
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Custom / Editable Name Field
           TextField(
             controller: _foodMedNameController,
+            onChanged: (val) {
+              if (val != _selectedCatalogItem) {
+                setState(() => _selectedCatalogItem = null);
+              }
+            },
             style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0B1B3D)),
             decoration: InputDecoration(
               labelText: '$_foodMedType Name / Description',
@@ -1593,14 +1853,19 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'RECENT TRANSACTIONS ($category)',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
+              Expanded(
+                child: Text(
+                  'RECENT TRANSACTIONS ($category)',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${transactions.length} entries',
                 style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),

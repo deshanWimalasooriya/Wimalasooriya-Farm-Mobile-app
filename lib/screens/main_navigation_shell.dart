@@ -2,10 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:intl/intl.dart';
 import '../core/theme/app_colors.dart';
 import '../core/widgets/custom_bottom_nav_bar.dart';
 import '../core/widgets/custom_drawer.dart';
 import '../core/widgets/hen_icon.dart';
+import '../models/farm_models.dart';
 import '../providers/farm_providers.dart';
 import 'dashboard_screen.dart';
 import 'flock_screen.dart';
@@ -14,6 +16,7 @@ import 'finance_screen.dart';
 import 'team_labor_screen.dart';
 import 'bulk_orders_screen.dart';
 import 'fleet_screen.dart';
+import 'admin_shops_screen.dart';
 
 class MainNavigationShell extends ConsumerStatefulWidget {
   final VoidCallback onLogout;
@@ -91,39 +94,169 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
   void _showNotificationsSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF16264C),
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0B1B3D),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
+        return Consumer(
+          builder: (context, ref, _) {
+            final notifsAsync = ref.watch(adminNotificationsStreamProvider);
+            final dateFormat = DateFormat('MMM dd, hh:mm a');
+
+            return Container(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.notifications_active_rounded, color: AppColors.darkPrimaryGold, size: 28),
-                  SizedBox(width: 12),
-                  Text('Farm Notifications', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.notifications_active_rounded, color: AppColors.darkPrimaryGold, size: 24),
+                          SizedBox(width: 10),
+                          Text(
+                            'Admin Notifications',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                      notifsAsync.maybeWhen(
+                        data: (notifs) {
+                          final unreadCount = notifs.where((n) => !n.isRead).length;
+                          if (unreadCount == 0) return const SizedBox.shrink();
+                          return TextButton(
+                            onPressed: () {
+                              ref.read(databaseServiceProvider).markAllNotificationsAsRead('admin');
+                            },
+                            child: const Text(
+                              'Mark all read',
+                              style: TextStyle(color: AppColors.darkPrimaryGold, fontSize: 12),
+                            ),
+                          );
+                        },
+                        orElse: () => const SizedBox.shrink(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Divider(color: Color(0x22FFFFFF), height: 1),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: notifsAsync.when(
+                      data: (notifs) {
+                        if (notifs.isEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.notifications_off_outlined, color: Colors.white30, size: 48),
+                                SizedBox(height: 10),
+                                Text('No notifications yet', style: TextStyle(color: Colors.white60)),
+                              ],
+                            ),
+                          );
+                        }
+                        return ListView.separated(
+                          itemCount: notifs.length,
+                          separatorBuilder: (_, __) => const Divider(color: Color(0x15FFFFFF), height: 1),
+                          itemBuilder: (ctx, idx) {
+                            final n = notifs[idx];
+                            IconData leadingIcon = Icons.notifications_none_rounded;
+                            Color iconColor = AppColors.darkPrimaryGold;
+                            if (n.type == 'order_placed') {
+                              leadingIcon = Icons.shopping_bag_outlined;
+                              iconColor = AppColors.darkPrimaryGold;
+                            } else if (n.type == 'order_accepted') {
+                              leadingIcon = Icons.check_circle_outline;
+                              iconColor = const Color(0xFF0EA5E9);
+                            }
+
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                              leading: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: iconColor.withOpacity(0.15),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(leadingIcon, color: iconColor, size: 20),
+                              ),
+                              title: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      n.title,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: n.isRead ? FontWeight.normal : FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                  if (!n.isRead)
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFEF4444),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    n.message,
+                                    style: TextStyle(
+                                      color: n.isRead ? Colors.white60 : Colors.white70,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  if (n.timestamp != null) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      dateFormat.format(n.timestamp!),
+                                      style: const TextStyle(color: Colors.white38, fontSize: 10),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              onTap: () {
+                                if (!n.isRead) {
+                                  ref.read(databaseServiceProvider).markNotificationAsRead(n.id);
+                                }
+                                if (n.orderId != null) {
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const BulkOrdersScreen()),
+                                  );
+                                }
+                              },
+                            );
+                          },
+                        );
+                      },
+                      loading: () => const Center(
+                        child: CircularProgressIndicator(color: AppColors.darkPrimaryGold),
+                      ),
+                      error: (err, _) => Center(
+                        child: Text('Error: $err', style: const TextStyle(color: Colors.redAccent)),
+                      ),
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 18),
-              ListTile(
-                leading: const Icon(Icons.warning_amber_rounded, color: AppColors.warningYellow),
-                title: const Text('Layer Feed Stock Low', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Only 2 days of feed reserve remaining.', style: TextStyle(color: Color(0xFF94A3B8))),
-                contentPadding: EdgeInsets.zero,
-              ),
-              ListTile(
-                leading: const Icon(Icons.shopping_bag_outlined, color: AppColors.darkGreen),
-                title: const Text('New Wholesale Order Received', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Colombo Supermarkets requested 5,000 eggs.', style: TextStyle(color: Color(0xFF94A3B8))),
-                contentPadding: EdgeInsets.zero,
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -151,6 +284,7 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
         key: _scaffoldKey,
         drawer: CustomNavigationDrawer(
           onOpenTeamLabor: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TeamLaborScreen())),
+          onOpenShops: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminShopsScreen())),
           onOpenBulkOrders: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BulkOrdersScreen())),
           onOpenFleet: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FleetScreen())),
           onLogout: widget.onLogout,
@@ -247,6 +381,7 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
       key: _scaffoldKey,
       drawer: CustomNavigationDrawer(
         onOpenTeamLabor: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TeamLaborScreen())),
+        onOpenShops: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminShopsScreen())),
         onOpenBulkOrders: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BulkOrdersScreen())),
         onOpenFleet: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FleetScreen())),
         onLogout: widget.onLogout,

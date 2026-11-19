@@ -6,6 +6,7 @@ import '../core/theme/app_colors.dart';
 import '../core/widgets/hen_icon.dart';
 import '../models/farm_models.dart';
 import '../providers/farm_providers.dart';
+import '../utils/app_snackbar.dart';
 
 class HomeScreen extends ConsumerWidget {
   final VoidCallback onOpenNotifications;
@@ -178,13 +179,10 @@ class HomeScreen extends ConsumerWidget {
                 if (text.isNotEmpty) {
                   final db = ref.read(databaseServiceProvider);
                   await db.addNewTask(text);
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Added task: "$text"'),
-                      backgroundColor: AppColors.darkGreen,
-                    ),
-                  );
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (context.mounted) {
+                    AppSnackBar.showSuccess(context, 'Added task: "$text"');
+                  }
                 }
               },
               child: const Text('SAVE TASK'),
@@ -224,12 +222,7 @@ class HomeScreen extends ConsumerWidget {
                 await db.deleteTask(task.id);
                 if (ctx.mounted) Navigator.pop(ctx, true);
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Task deleted successfully'),
-                      backgroundColor: Color(0xFFEF4444),
-                    ),
-                  );
+                  AppSnackBar.showInfo(context, 'Task deleted successfully');
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -278,17 +271,14 @@ class HomeScreen extends ConsumerWidget {
               onPressed: () async {
                 final db = ref.read(databaseServiceProvider);
                 await db.toggleTaskCompletion(task.id, newStatus);
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      newStatus
-                          ? 'Completed: "${task.title}"'
-                          : 'Marked pending: "${task.title}"',
-                    ),
-                    backgroundColor: newStatus ? AppColors.darkGreen : AppColors.darkHarvestGold,
-                  ),
-                );
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  if (newStatus) {
+                    AppSnackBar.showSuccess(context, 'Completed: "${task.title}"');
+                  } else {
+                    AppSnackBar.showInfo(context, 'Marked pending: "${task.title}"');
+                  }
+                }
               },
               child: const Text('CONFIRM'),
             ),
@@ -343,28 +333,17 @@ class HomeScreen extends ConsumerWidget {
             padding: const EdgeInsets.only(right: 16),
             child: Consumer(
               builder: (context, ref, _) {
-                final vehicleAlerts = ref.watch(expiringVehiclesProvider);
-                final feedStock = metricsAsync.value?.feedPacketStock ?? 0;
-                final henCount = metricsAsync.value?.currentHenCount ?? 0;
-                final isFeedLow = metricsAsync.value != null && feedStock > 0 && feedStock <= 150;
-                final isHenLow = metricsAsync.value != null && henCount > 0 && henCount < 100;
-                final totalAlerts = vehicleAlerts.length + (isFeedLow ? 1 : 0) + (isHenLow ? 1 : 0);
+                final notifsAsync = ref.watch(adminNotificationsStreamProvider);
+                final unreadNotifsCount = notifsAsync.value?.where((n) => !n.isRead).length ?? 0;
 
                 return Stack(
                   clipBehavior: Clip.none,
                   children: [
                     IconButton(
                       icon: const Icon(Icons.notifications_rounded, size: 28),
-                      onPressed: () => _showNotificationSheet(
-                        context,
-                        vehicleAlerts,
-                        isFeedLow,
-                        feedStock,
-                        isHenLow,
-                        henCount,
-                      ),
+                      onPressed: onOpenNotifications,
                     ),
-                    if (totalAlerts > 0)
+                    if (unreadNotifsCount > 0)
                       Positioned(
                         right: 8,
                         top: 8,
@@ -376,7 +355,7 @@ class HomeScreen extends ConsumerWidget {
                           ),
                           constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                           child: Text(
-                            '$totalAlerts',
+                            '$unreadNotifsCount',
                             textAlign: TextAlign.center,
                             style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                           ),

@@ -16,6 +16,10 @@ class AppUser {
   final String phone;
   final String nic;
   final String farmBranch;
+  final String? shopName;
+  final String? shopAddress;
+  final double? latitude;
+  final double? longitude;
   final String? avatarUrl;
   final String? visiblePassword;
   final bool hasChangedPassword;
@@ -29,21 +33,32 @@ class AppUser {
     this.phone = '',
     this.nic = '',
     this.farmBranch = 'Main Farm — Kurunegala',
+    this.shopName,
+    this.shopAddress,
+    this.latitude,
+    this.longitude,
     this.avatarUrl,
     this.visiblePassword,
     this.hasChangedPassword = false,
     this.createdAt,
   });
 
+  String get shopNameOrName => (shopName != null && shopName!.trim().isNotEmpty) ? shopName!.trim() : name;
+  bool get hasGps => latitude != null && longitude != null;
+
   factory AppUser.fromMap(Map<String, dynamic> data, String id) {
     return AppUser(
       uid: id,
-      name: data['name'] ?? 'Deshan Wimalasooriya',
-      email: data['email'] ?? 'deshanwimalasooriya000@gmail.com',
-      role: data['role'] ?? 'Admin / Manager',
-      phone: data['phone'] ?? '+94 77 123 4567',
-      nic: data['nic'] ?? '199214502341',
+      name: data['name'] ?? '',
+      email: data['email'] ?? '',
+      role: data['role'] ?? 'Customer',
+      phone: data['phone'] ?? '',
+      nic: data['nic'] ?? '',
       farmBranch: data['farmBranch'] ?? 'Main Farm — Kurunegala',
+      shopName: data['shopName'],
+      shopAddress: data['shopAddress'],
+      latitude: data['latitude'] != null ? (data['latitude'] as num).toDouble() : null,
+      longitude: data['longitude'] != null ? (data['longitude'] as num).toDouble() : null,
       avatarUrl: data['avatarUrl'],
       visiblePassword: data['visiblePassword'],
       hasChangedPassword: (data['hasChangedPassword'] ?? false) as bool,
@@ -60,11 +75,51 @@ class AppUser {
       'phone': phone,
       'nic': nic,
       'farmBranch': farmBranch,
+      'shopName': shopName,
+      'shopAddress': shopAddress,
+      'latitude': latitude,
+      'longitude': longitude,
       'avatarUrl': avatarUrl,
       'visiblePassword': visiblePassword,
       'hasChangedPassword': hasChangedPassword,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
     };
+  }
+
+  AppUser copyWith({
+    String? uid,
+    String? name,
+    String? email,
+    String? role,
+    String? phone,
+    String? nic,
+    String? farmBranch,
+    String? shopName,
+    String? shopAddress,
+    double? latitude,
+    double? longitude,
+    String? avatarUrl,
+    String? visiblePassword,
+    bool? hasChangedPassword,
+    DateTime? createdAt,
+  }) {
+    return AppUser(
+      uid: uid ?? this.uid,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      role: role ?? this.role,
+      phone: phone ?? this.phone,
+      nic: nic ?? this.nic,
+      farmBranch: farmBranch ?? this.farmBranch,
+      shopName: shopName ?? this.shopName,
+      shopAddress: shopAddress ?? this.shopAddress,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      visiblePassword: visiblePassword ?? this.visiblePassword,
+      hasChangedPassword: hasChangedPassword ?? this.hasChangedPassword,
+      createdAt: createdAt ?? this.createdAt,
+    );
   }
 
   @override
@@ -863,4 +918,203 @@ class FarmSettings {
   @override
   int get hashCode => Object.hash(companyName, address, contactNumber, unitEggPrice, maxHenCapacity);
 }
+
+class CustomerOrder {
+  final String orderId;
+  final String customerId;
+  final String customerName;
+  final String customerPhone;
+  final String shopName;
+  final String shopAddress;
+  final double? latitude;
+  final double? longitude;
+  final int quantity;
+  final double unitPrice;
+  final double totalPrice;
+  final String status; // 'Pending' | 'Accepted' | 'Assigned' | 'Delivered' | 'Rejected'
+  final DateTime? timestamp;
+  final DateTime? acceptedAt;
+  final DateTime? dispatchedAt;
+  final DateTime? deliveredAt;
+  final DateTime? rejectedAt;
+  final String? rejectionReason;
+
+  CustomerOrder({
+    required this.orderId,
+    required this.customerId,
+    required this.customerName,
+    required this.customerPhone,
+    required this.shopName,
+    required this.shopAddress,
+    this.latitude,
+    this.longitude,
+    required this.quantity,
+    required this.unitPrice,
+    required this.totalPrice,
+    this.status = 'Pending',
+    this.timestamp,
+    this.acceptedAt,
+    this.dispatchedAt,
+    this.deliveredAt,
+    this.rejectedAt,
+    this.rejectionReason,
+  });
+
+  factory CustomerOrder.fromMap(Map<String, dynamic> data, String id) {
+    return CustomerOrder(
+      orderId: data['orderId'] ?? id,
+      customerId: data['customerId'] ?? '',
+      customerName: data['customerName'] ?? '',
+      customerPhone: data['customerPhone'] ?? '',
+      shopName: data['shopName'] ?? '',
+      shopAddress: data['shopAddress'] ?? '',
+      latitude: data['latitude'] != null ? (data['latitude'] as num).toDouble() : null,
+      longitude: data['longitude'] != null ? (data['longitude'] as num).toDouble() : null,
+      quantity: (data['quantity'] ?? 0) as int,
+      unitPrice: ((data['unitPrice'] ?? 0.0) as num).toDouble(),
+      totalPrice: ((data['totalPrice'] ?? 0.0) as num).toDouble(),
+      status: data['status'] ?? 'Pending',
+      timestamp: parseDateTime(data['timestamp']),
+      acceptedAt: parseDateTime(data['acceptedAt']),
+      dispatchedAt: parseDateTime(data['dispatchedAt']),
+      deliveredAt: parseDateTime(data['deliveredAt']),
+      rejectedAt: parseDateTime(data['rejectedAt']),
+      rejectionReason: data['rejectionReason'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'orderId': orderId,
+      'customerId': customerId,
+      'customerName': customerName,
+      'customerPhone': customerPhone,
+      'shopName': shopName,
+      'shopAddress': shopAddress,
+      'latitude': latitude,
+      'longitude': longitude,
+      'quantity': quantity,
+      'unitPrice': unitPrice,
+      'totalPrice': totalPrice,
+      'status': status,
+      'timestamp': timestamp != null ? Timestamp.fromDate(timestamp!) : FieldValue.serverTimestamp(),
+      if (acceptedAt != null) 'acceptedAt': Timestamp.fromDate(acceptedAt!),
+      if (dispatchedAt != null) 'dispatchedAt': Timestamp.fromDate(dispatchedAt!),
+      if (deliveredAt != null) 'deliveredAt': Timestamp.fromDate(deliveredAt!),
+      if (rejectedAt != null) 'rejectedAt': Timestamp.fromDate(rejectedAt!),
+      if (rejectionReason != null) 'rejectionReason': rejectionReason,
+    };
+  }
+
+  CustomerOrder copyWith({
+    String? orderId,
+    String? customerId,
+    String? customerName,
+    String? customerPhone,
+    String? shopName,
+    String? shopAddress,
+    double? latitude,
+    double? longitude,
+    int? quantity,
+    double? unitPrice,
+    double? totalPrice,
+    String? status,
+    DateTime? timestamp,
+    DateTime? acceptedAt,
+    DateTime? dispatchedAt,
+    DateTime? deliveredAt,
+    DateTime? rejectedAt,
+    String? rejectionReason,
+  }) {
+    return CustomerOrder(
+      orderId: orderId ?? this.orderId,
+      customerId: customerId ?? this.customerId,
+      customerName: customerName ?? this.customerName,
+      customerPhone: customerPhone ?? this.customerPhone,
+      shopName: shopName ?? this.shopName,
+      shopAddress: shopAddress ?? this.shopAddress,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      quantity: quantity ?? this.quantity,
+      unitPrice: unitPrice ?? this.unitPrice,
+      totalPrice: totalPrice ?? this.totalPrice,
+      status: status ?? this.status,
+      timestamp: timestamp ?? this.timestamp,
+      acceptedAt: acceptedAt ?? this.acceptedAt,
+      dispatchedAt: dispatchedAt ?? this.dispatchedAt,
+      deliveredAt: deliveredAt ?? this.deliveredAt,
+      rejectedAt: rejectedAt ?? this.rejectedAt,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+    );
+  }
+}
+
+class FarmNotification {
+  final String id;
+  final String recipientId; // UID or 'admin'
+  final String title;
+  final String message;
+  final String? orderId;
+  final String type; // 'order_placed' | 'order_accepted' | 'order_rejected' | 'general'
+  final bool isRead;
+  final DateTime? timestamp;
+
+  FarmNotification({
+    required this.id,
+    required this.recipientId,
+    required this.title,
+    required this.message,
+    this.orderId,
+    this.type = 'general',
+    this.isRead = false,
+    this.timestamp,
+  });
+
+  factory FarmNotification.fromMap(Map<String, dynamic> data, String id) {
+    return FarmNotification(
+      id: id,
+      recipientId: data['recipientId'] ?? '',
+      title: data['title'] ?? '',
+      message: data['message'] ?? '',
+      orderId: data['orderId'],
+      type: data['type'] ?? 'general',
+      isRead: (data['isRead'] ?? false) as bool,
+      timestamp: parseDateTime(data['timestamp']),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'recipientId': recipientId,
+      'title': title,
+      'message': message,
+      'orderId': orderId,
+      'type': type,
+      'isRead': isRead,
+      'timestamp': timestamp != null ? Timestamp.fromDate(timestamp!) : FieldValue.serverTimestamp(),
+    };
+  }
+}
+
+class CatalogItem {
+  final String name;
+  final String description;
+
+  CatalogItem({required this.name, required this.description});
+
+  factory CatalogItem.fromMap(Map<String, dynamic> data) {
+    return CatalogItem(
+      name: data['name'] ?? '',
+      description: data['description'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'description': description,
+    };
+  }
+}
+
 

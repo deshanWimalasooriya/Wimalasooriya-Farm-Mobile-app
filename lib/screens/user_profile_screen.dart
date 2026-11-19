@@ -6,6 +6,7 @@ import '../core/constants/app_assets.dart';
 import '../core/theme/app_colors.dart';
 import '../models/farm_models.dart';
 import '../providers/farm_providers.dart';
+import '../utils/app_snackbar.dart';
 
 class UserProfileScreen extends ConsumerStatefulWidget {
   const UserProfileScreen({super.key});
@@ -116,6 +117,10 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         phone: _phoneController.text.trim(),
         nic: _nicController.text.trim(),
         farmBranch: currentUser.farmBranch,
+        shopName: currentUser.shopName,
+        shopAddress: currentUser.shopAddress,
+        latitude: currentUser.latitude,
+        longitude: currentUser.longitude,
         avatarUrl: currentUser.avatarUrl,
         visiblePassword: currentUser.visiblePassword,
         hasChangedPassword: currentUser.hasChangedPassword,
@@ -124,22 +129,12 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       await db.updateUserProfile(updatedUser);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile changes saved successfully!'),
-            backgroundColor: AppColors.darkGreen,
-          ),
-        );
+        AppSnackBar.showSuccess(context, 'Profile changes saved successfully!');
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update profile: $e'),
-            backgroundColor: AppColors.darkRed,
-          ),
-        );
+        AppSnackBar.showError(context, 'Failed to update profile: $e');
       }
     } finally {
       if (mounted) {
@@ -287,19 +282,15 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
                             if (ctx.mounted) Navigator.pop(ctx);
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Password reset successfully! Visible to admin.'),
-                                  backgroundColor: AppColors.darkGreen,
-                                ),
+                              AppSnackBar.showSuccess(
+                                context,
+                                'Password reset successfully! Visible to admin.',
                               );
                             }
                           } catch (e) {
                             setDialogState(() => isUpdatingPassword = false);
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Notice: $e'), backgroundColor: AppColors.darkRed),
-                              );
+                              AppSnackBar.showError(context, 'Notice: $e');
                             }
                           }
                         },

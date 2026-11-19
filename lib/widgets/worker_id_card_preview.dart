@@ -11,6 +11,7 @@ import '../core/constants/app_assets.dart';
 import '../core/theme/app_colors.dart';
 import '../models/farm_models.dart';
 import '../providers/farm_providers.dart';
+import '../utils/app_snackbar.dart';
 
 /// Helper to generate the structured JSON string for the worker QR code payload.
 String buildWorkerQrPayload(Worker worker) {
@@ -385,12 +386,7 @@ class _WorkerIdCardDialogState extends State<WorkerIdCardDialog> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error sharing ID card: $e'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
+        AppSnackBar.showError(context, 'Error sharing ID card: $e');
       }
     } finally {
       if (mounted) setState(() => _isCapturing = false);

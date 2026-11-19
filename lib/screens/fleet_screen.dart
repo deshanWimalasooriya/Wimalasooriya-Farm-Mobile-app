@@ -5,6 +5,7 @@ import '../core/theme/app_colors.dart';
 import '../models/farm_models.dart';
 import '../providers/farm_providers.dart';
 import '../services/database_service.dart';
+import '../utils/app_snackbar.dart';
 
 class FleetScreen extends ConsumerStatefulWidget {
   const FleetScreen({super.key});
@@ -812,9 +813,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
 
       await db.updateVehicle(updated);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Vehicle ${v.regNumber} marked as $newStatus'), backgroundColor: AppColors.darkGreen),
-        );
+        AppSnackBar.showSuccess(context, 'Vehicle ${v.regNumber} marked as $newStatus');
       }
     }
   }
@@ -831,9 +830,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
       final db = ref.read(databaseServiceProvider);
       await db.deleteVehicle(v.vehicleId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Vehicle ${v.regNumber} deleted'), backgroundColor: AppColors.darkGreen),
-        );
+        AppSnackBar.showInfo(context, 'Vehicle ${v.regNumber} deleted');
       }
     }
   }
@@ -1398,9 +1395,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
                   onPressed: () async {
                     final regNumber = regNoController.text.trim().toUpperCase();
                     if (regNumber.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter a Registration Number'), backgroundColor: AppColors.darkRed),
-                      );
+                      AppSnackBar.showError(context, 'Please enter a Registration Number');
                       return;
                     }
 
@@ -1446,11 +1441,9 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
 
                       if (dialogCtx.mounted) Navigator.pop(dialogCtx);
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(isEditing ? 'Vehicle $regNumber updated!' : 'Vehicle $regNumber registered successfully!'),
-                            backgroundColor: AppColors.darkGreen,
-                          ),
+                        AppSnackBar.showSuccess(
+                          context,
+                          isEditing ? 'Vehicle $regNumber updated!' : 'Vehicle $regNumber registered successfully!',
                         );
                       }
                     }
@@ -1708,9 +1701,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
 
                   if (ctx.mounted) Navigator.pop(ctx);
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Vehicle group "$name" created!'), backgroundColor: AppColors.darkGreen),
-                    );
+                    AppSnackBar.showSuccess(context, 'Vehicle group "$name" created!');
                   }
                 }
               },
@@ -1805,11 +1796,9 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
 
                         if (ctx.mounted) Navigator.pop(ctx);
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Vehicle ${selectedV.regNumber} assigned to ${group.name}!'),
-                              backgroundColor: AppColors.darkGreen,
-                            ),
+                          AppSnackBar.showSuccess(
+                            context,
+                            'Vehicle ${selectedV.regNumber} assigned to ${group.name}!',
                           );
                         }
                       }
@@ -1842,9 +1831,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
       final db = ref.read(databaseServiceProvider);
       await db.removeVehicleFromGroup(vehicleId: v.vehicleId, groupId: group.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${v.regNumber} removed from ${group.name}'), backgroundColor: AppColors.darkGreen),
-        );
+        AppSnackBar.showInfo(context, '${v.regNumber} removed from ${group.name}');
       }
     }
   }
@@ -1861,9 +1848,7 @@ class _FleetScreenState extends ConsumerState<FleetScreen> with SingleTickerProv
       final db = ref.read(databaseServiceProvider);
       await db.deleteVehicleGroup(group.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Vehicle group "${group.name}" deleted!'), backgroundColor: AppColors.darkGreen),
-        );
+        AppSnackBar.showInfo(context, 'Vehicle group "${group.name}" deleted!');
       }
     }
   }
